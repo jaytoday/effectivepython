@@ -265,6 +265,12 @@ p + .highlight {
     iframe {
         width: 100%;
     }
+    .learn-more-photo {
+        margin: 0 auto;
+        display: block;
+        max-width: 60%;
+        max-height: none;
+    }
 }
 
 @media (min-width: 640px) {
