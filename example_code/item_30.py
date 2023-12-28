@@ -1,6 +1,6 @@
-#!/usr/bin/env python3
+#!/usr/bin/env PYTHONHASHSEED=1234 python3
 
-# Copyright 2014 Brett Slatkin, Pearson Education Inc.
+# Copyright 2014-2019 Brett Slatkin, Pearson Education Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,123 +14,100 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Preamble to mimick book environment
+# Reproduce book environment
+import random
+random.seed(1234)
+
 import logging
 from pprint import pprint
 from sys import stdout as STDOUT
 
+# Write all output to a temporary directory
+import atexit
+import gc
+import io
+import os
+import tempfile
+
+TEST_DIR = tempfile.TemporaryDirectory()
+atexit.register(TEST_DIR.cleanup)
+
+# Make sure Windows processes exit cleanly
+OLD_CWD = os.getcwd()
+atexit.register(lambda: os.chdir(OLD_CWD))
+os.chdir(TEST_DIR.name)
+
+def close_open_files():
+    everything = gc.get_objects()
+    for obj in everything:
+        if isinstance(obj, io.IOBase):
+            obj.close()
+
+atexit.register(close_open_files)
+
 
 # Example 1
-from datetime import datetime, timedelta
-
-class Bucket(object):
-    def __init__(self, period):
-        self.period_delta = timedelta(seconds=period)
-        self.reset_time = datetime.now()
-        self.quota = 0
-
-    def __repr__(self):
-        return 'Bucket(quota=%d)' % self.quota
-
-bucket = Bucket(60)
-print(bucket)
+def index_words(text):
+    result = []
+    if text:
+        result.append(0)
+    for index, letter in enumerate(text):
+        if letter == ' ':
+            result.append(index + 1)
+    return result
 
 
 # Example 2
-def fill(bucket, amount):
-    now = datetime.now()
-    if now - bucket.reset_time > bucket.period_delta:
-        bucket.quota = 0
-        bucket.reset_time = now
-    bucket.quota += amount
+address = 'Four score and seven years ago...'
+address = 'Four score and seven years ago our fathers brought forth on this continent a new nation, conceived in liberty, and dedicated to the proposition that all men are created equal.'
+result = index_words(address)
+print(result[:10])
 
 
 # Example 3
-def deduct(bucket, amount):
-    now = datetime.now()
-    if now - bucket.reset_time > bucket.period_delta:
-        return False
-    if bucket.quota - amount < 0:
-        return False
-    bucket.quota -= amount
-    return True
+def index_words_iter(text):
+    if text:
+        yield 0
+    for index, letter in enumerate(text):
+        if letter == ' ':
+            yield index + 1
 
 
 # Example 4
-bucket = Bucket(60)
-fill(bucket, 100)
-print(bucket)
+it = index_words_iter(address)
+print(next(it))
+print(next(it))
 
 
 # Example 5
-if deduct(bucket, 99):
-    print('Had 99 quota')
-else:
-    print('Not enough for 99 quota')
-print(bucket)
+result = list(index_words_iter(address))
+print(result[:10])
 
 
 # Example 6
-if deduct(bucket, 3):
-    print('Had 3 quota')
-else:
-    print('Not enough for 3 quota')
-print(bucket)
+def index_file(handle):
+    offset = 0
+    for line in handle:
+        if line:
+            yield offset
+        for letter in line:
+            offset += 1
+            if letter == ' ':
+                yield offset
 
 
 # Example 7
-class Bucket(object):
-    def __init__(self, period):
-        self.period_delta = timedelta(seconds=period)
-        self.reset_time = datetime.now()
-        self.max_quota = 0
-        self.quota_consumed = 0
+address_lines = """Four score and seven years
+ago our fathers brought forth on this
+continent a new nation, conceived in liberty,
+and dedicated to the proposition that all men
+are created equal."""
 
-    def __repr__(self):
-        return ('Bucket(max_quota=%d, quota_consumed=%d)' %
-                (self.max_quota, self.quota_consumed))
+with open('address.txt', 'w') as f:
+    f.write(address_lines)
 
-
-# Example 8
-    @property
-    def quota(self):
-        return self.max_quota - self.quota_consumed
-
-
-# Example 9
-    @quota.setter
-    def quota(self, amount):
-        delta = self.max_quota - amount
-        if amount == 0:
-            # Quota being reset for a new period
-            self.quota_consumed = 0
-            self.max_quota = 0
-        elif delta < 0:
-            # Quota being filled for the new period
-            assert self.quota_consumed == 0
-            self.max_quota = amount
-        else:
-            # Quota being consumed during the period
-            assert self.max_quota >= self.quota_consumed
-            self.quota_consumed += delta
-
-
-# Example 10
-bucket = Bucket(60)
-print('Initial', bucket)
-fill(bucket, 100)
-print('Filled', bucket)
-
-if deduct(bucket, 99):
-    print('Had 99 quota')
-else:
-    print('Not enough for 99 quota')
-
-print('Now', bucket)
-
-if deduct(bucket, 3):
-    print('Had 3 quota')
-else:
-    print('Not enough for 3 quota')
-
-print('Still', bucket)
+import itertools
+with open('address.txt', 'r') as f:
+    it = index_file(f)
+    results = itertools.islice(it, 0, 10)
+    print(list(results))

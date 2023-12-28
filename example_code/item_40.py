@@ -1,6 +1,6 @@
-#!/usr/bin/env python3
+#!/usr/bin/env PYTHONHASHSEED=1234 python3
 
-# Copyright 2014 Brett Slatkin, Pearson Education Inc.
+# Copyright 2014-2019 Brett Slatkin, Pearson Education Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,242 +14,161 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Preamble to mimick book environment
+# Reproduce book environment
+import random
+random.seed(1234)
+
 import logging
 from pprint import pprint
 from sys import stdout as STDOUT
 
+# Write all output to a temporary directory
+import atexit
+import gc
+import io
+import os
+import tempfile
+
+TEST_DIR = tempfile.TemporaryDirectory()
+atexit.register(TEST_DIR.cleanup)
+
+# Make sure Windows processes exit cleanly
+OLD_CWD = os.getcwd()
+atexit.register(lambda: os.chdir(OLD_CWD))
+os.chdir(TEST_DIR.name)
+
+def close_open_files():
+    everything = gc.get_objects()
+    for obj in everything:
+        if isinstance(obj, io.IOBase):
+            obj.close()
+
+atexit.register(close_open_files)
+
 
 # Example 1
-def my_coroutine():
-    while True:
-        received = yield
-        print('Received:', received)
+class MyBaseClass:
+    def __init__(self, value):
+        self.value = value
 
-it = my_coroutine()
-next(it)             # Prime the coroutine
-it.send('First')
-it.send('Second')
+class MyChildClass(MyBaseClass):
+    def __init__(self):
+        MyBaseClass.__init__(self, 5)
+
+    def times_two(self):
+        return self.value * 2
+
+foo = MyChildClass()
+assert foo.times_two() == 10
 
 
 # Example 2
-def minimize():
-    current = yield
-    while True:
-        value = yield current
-        current = min(value, current)
+class TimesTwo:
+    def __init__(self):
+        self.value *= 2
+
+class PlusFive:
+    def __init__(self):
+        self.value += 5
 
 
 # Example 3
-it = minimize()
-next(it)            # Prime the generator
-print(it.send(10))
-print(it.send(4))
-print(it.send(22))
-print(it.send(-1))
+class OneWay(MyBaseClass, TimesTwo, PlusFive):
+    def __init__(self, value):
+        MyBaseClass.__init__(self, value)
+        TimesTwo.__init__(self)
+        PlusFive.__init__(self)
 
 
 # Example 4
-ALIVE = '*'
-EMPTY = '-'
+foo = OneWay(5)
+print('First ordering value is (5 * 2) + 5 =', foo.value)
 
 
 # Example 5
-from collections import namedtuple
-Query = namedtuple('Query', ('y', 'x'))
+class AnotherWay(MyBaseClass, PlusFive, TimesTwo):
+    def __init__(self, value):
+        MyBaseClass.__init__(self, value)
+        TimesTwo.__init__(self)
+        PlusFive.__init__(self)
 
 
 # Example 6
-def count_neighbors(y, x):
-    n_ = yield Query(y + 1, x + 0)  # North
-    ne = yield Query(y + 1, x + 1)  # Northeast
-    # Define e_, se, s_, sw, w_, nw ...
-    e_ = yield Query(y + 0, x + 1)  # East
-    se = yield Query(y - 1, x + 1)  # Southeast
-    s_ = yield Query(y - 1, x + 0)  # South
-    sw = yield Query(y - 1, x - 1)  # Southwest
-    w_ = yield Query(y + 0, x - 1)  # West
-    nw = yield Query(y + 1, x - 1)  # Northwest
-    neighbor_states = [n_, ne, e_, se, s_, sw, w_, nw]
-    count = 0
-    for state in neighbor_states:
-        if state == ALIVE:
-            count += 1
-    return count
+bar = AnotherWay(5)
+print('Second ordering value is', bar.value)
 
 
 # Example 7
-it = count_neighbors(10, 5)
-q1 = next(it)                  # Get the first query
-print('First yield: ', q1)
-q2 = it.send(ALIVE)            # Send q1 state, get q2
-print('Second yield:', q2)
-q3 = it.send(ALIVE)            # Send q2 state, get q3
-print('...')
-q4 = it.send(EMPTY)
-q5 = it.send(EMPTY)
-q6 = it.send(EMPTY)
-q7 = it.send(EMPTY)
-q8 = it.send(EMPTY)
-try:
-    it.send(EMPTY)     # Send q8 state, retrieve count
-except StopIteration as e:
-    print('Count: ', e.value)  # Value from return statement
+class TimesSeven(MyBaseClass):
+    def __init__(self, value):
+        MyBaseClass.__init__(self, value)
+        self.value *= 7
+
+class PlusNine(MyBaseClass):
+    def __init__(self, value):
+        MyBaseClass.__init__(self, value)
+        self.value += 9
 
 
 # Example 8
-Transition = namedtuple('Transition', ('y', 'x', 'state'))
+class ThisWay(TimesSeven, PlusNine):
+    def __init__(self, value):
+        TimesSeven.__init__(self, value)
+        PlusNine.__init__(self, value)
+
+foo = ThisWay(5)
+print('Should be (5 * 7) + 9 = 44 but is', foo.value)
 
 
 # Example 9
-def game_logic(state, neighbors):
-    pass
+class MyBaseClass:
+    def __init__(self, value):
+        self.value = value
 
-def step_cell(y, x):
-    state = yield Query(y, x)
-    neighbors = yield from count_neighbors(y, x)
-    next_state = game_logic(state, neighbors)
-    yield Transition(y, x, next_state)
+class TimesSevenCorrect(MyBaseClass):
+    def __init__(self, value):
+        super().__init__(value)
+        self.value *= 7
+
+class PlusNineCorrect(MyBaseClass):
+    def __init__(self, value):
+        super().__init__(value)
+        self.value += 9
 
 
 # Example 10
-def game_logic(state, neighbors):
-    if state == ALIVE:
-        if neighbors < 2:
-            return EMPTY     # Die: Too few
-        elif neighbors > 3:
-            return EMPTY     # Die: Too many
-    else:
-        if neighbors == 3:
-            return ALIVE     # Regenerate
-    return state
+class GoodWay(TimesSevenCorrect, PlusNineCorrect):
+    def __init__(self, value):
+        super().__init__(value)
+
+foo = GoodWay(5)
+print('Should be 7 * (5 + 9) = 98 and is', foo.value)
 
 
 # Example 11
-it = step_cell(10, 5)
-q0 = next(it)           # Initial location query
-print('Me:      ', q0)
-q1 = it.send(ALIVE)     # Send my status, get neighbor query
-print('Q1:      ', q1)
-print('...')
-q2 = it.send(ALIVE)
-q3 = it.send(ALIVE)
-q4 = it.send(ALIVE)
-q5 = it.send(ALIVE)
-q6 = it.send(EMPTY)
-q7 = it.send(EMPTY)
-q8 = it.send(EMPTY)
-t1 = it.send(EMPTY)     # Send for q8, get game decision
-print('Outcome: ', t1)
+mro_str = '\n'.join(repr(cls) for cls in GoodWay.mro())
+print(mro_str)
 
 
 # Example 12
-TICK = object()
-
-def simulate(height, width):
-    while True:
-        for y in range(height):
-            for x in range(width):
-                yield from step_cell(y, x)
-        yield TICK
+class ExplicitTrisect(MyBaseClass):
+    def __init__(self, value):
+        super(ExplicitTrisect, self).__init__(value)
+        self.value /= 3
+assert ExplicitTrisect(9).value == 3
 
 
 # Example 13
-class Grid(object):
-    def __init__(self, height, width):
-        self.height = height
-        self.width = width
-        self.rows = []
-        for _ in range(self.height):
-            self.rows.append([EMPTY] * self.width)
+class AutomaticTrisect(MyBaseClass):
+    def __init__(self, value):
+        super(__class__, self).__init__(value)
+        self.value /= 3
 
-    def __str__(self):
-        output = ''
-        for row in self.rows:
-            for cell in row:
-                output += cell
-            output += '\n'
-        return output
+class ImplicitTrisect(MyBaseClass):
+    def __init__(self, value):
+        super().__init__(value)
+        self.value /= 3
 
-
-# Example 14
-    def query(self, y, x):
-        return self.rows[y % self.height][x % self.width]
-
-    def assign(self, y, x, state):
-        self.rows[y % self.height][x % self.width] = state
-
-
-# Example 15
-def live_a_generation(grid, sim):
-    progeny = Grid(grid.height, grid.width)
-    item = next(sim)
-    while item is not TICK:
-        if isinstance(item, Query):
-            state = grid.query(item.y, item.x)
-            item = sim.send(state)
-        else:  # Must be a Transition
-            progeny.assign(item.y, item.x, item.state)
-            item = next(sim)
-    return progeny
-
-
-# Example 16
-grid = Grid(5, 9)
-grid.assign(0, 3, ALIVE)
-grid.assign(1, 4, ALIVE)
-grid.assign(2, 2, ALIVE)
-grid.assign(2, 3, ALIVE)
-grid.assign(2, 4, ALIVE)
-print(grid)
-
-
-# Example 17
-class ColumnPrinter(object):
-    def __init__(self):
-        self.columns = []
-
-    def append(self, data):
-        self.columns.append(data)
-
-    def __str__(self):
-        row_count = 1
-        for data in self.columns:
-            row_count = max(row_count, len(data.splitlines()) + 1)
-        rows = [''] * row_count
-        for j in range(row_count):
-            for i, data in enumerate(self.columns):
-                line = data.splitlines()[max(0, j - 1)]
-                if j == 0:
-                    padding = ' ' * (len(line) // 2)
-                    rows[j] += padding + str(i) + padding
-                else:
-                    rows[j] += line
-                if (i + 1) < len(self.columns):
-                    rows[j] += ' | '
-        return '\n'.join(rows)
-
-columns = ColumnPrinter()
-sim = simulate(grid.height, grid.width)
-for i in range(5):
-    columns.append(str(grid))
-    grid = live_a_generation(grid, sim)
-
-print(columns)
-
-
-# Example 20
-# This is for the introductory diagram
-grid = Grid(5, 5)
-grid.assign(1, 1, ALIVE)
-grid.assign(2, 2, ALIVE)
-grid.assign(2, 3, ALIVE)
-grid.assign(3, 3, ALIVE)
-
-columns = ColumnPrinter()
-sim = simulate(grid.height, grid.width)
-for i in range(5):
-    columns.append(str(grid))
-    grid = live_a_generation(grid, sim)
-
-print(columns)
+assert ExplicitTrisect(9).value == 3
+assert AutomaticTrisect(9).value == 3
+assert ImplicitTrisect(9).value == 3

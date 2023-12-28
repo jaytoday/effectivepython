@@ -1,6 +1,6 @@
-#!/usr/bin/env python3
+#!/usr/bin/env PYTHONHASHSEED=1234 python3
 
-# Copyright 2014 Brett Slatkin, Pearson Education Inc.
+# Copyright 2014-2019 Brett Slatkin, Pearson Education Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,93 +14,129 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Preamble to mimick book environment
+# Reproduce book environment
+import random
+random.seed(1234)
+
 import logging
 from pprint import pprint
 from sys import stdout as STDOUT
 
+# Write all output to a temporary directory
+import atexit
+import gc
+import io
+import os
+import tempfile
+
+TEST_DIR = tempfile.TemporaryDirectory()
+atexit.register(TEST_DIR.cleanup)
+
+# Make sure Windows processes exit cleanly
+OLD_CWD = os.getcwd()
+atexit.register(lambda: os.chdir(OLD_CWD))
+os.chdir(TEST_DIR.name)
+
+def close_open_files():
+    everything = gc.get_objects()
+    for obj in everything:
+        if isinstance(obj, io.IOBase):
+            obj.close()
+
+atexit.register(close_open_files)
+
 
 # Example 1
-def remainder(number, divisor):
-    return number % divisor
+def get_stats(numbers):
+    minimum = min(numbers)
+    maximum = max(numbers)
+    return minimum, maximum
 
-assert remainder(20, 7) == 6
+lengths = [63, 73, 72, 60, 67, 66, 71, 61, 72, 70]
+
+minimum, maximum = get_stats(lengths)  # Two return values
+
+print(f'Min: {minimum}, Max: {maximum}')
 
 
 # Example 2
-remainder(20, 7)
-remainder(20, divisor=7)
-remainder(number=20, divisor=7)
-remainder(divisor=7, number=20)
+first, second = 1, 2
+assert first == 1
+assert second == 2
+
+def my_function():
+    return 1, 2
+
+first, second = my_function()
+assert first == 1
+assert second == 2
 
 
 # Example 3
-try:
-    # This will not compile
-    source = """remainder(number=20, 7)"""
-    eval(source)
-except:
-    logging.exception('Expected')
-else:
-    assert False
+def get_avg_ratio(numbers):
+    average = sum(numbers) / len(numbers)
+    scaled = [x / average for x in numbers]
+    scaled.sort(reverse=True)
+    return scaled
+
+longest, *middle, shortest = get_avg_ratio(lengths)
+
+print(f'Longest:  {longest:>4.0%}')
+print(f'Shortest: {shortest:>4.0%}')
 
 
 # Example 4
-try:
-    remainder(20, number=7)
-except:
-    logging.exception('Expected')
-else:
-    assert False
+def get_stats(numbers):
+    minimum = min(numbers)
+    maximum = max(numbers)
+    count = len(numbers)
+    average = sum(numbers) / count
+
+    sorted_numbers = sorted(numbers)
+    middle = count // 2
+    if count % 2 == 0:
+        lower = sorted_numbers[middle - 1]
+        upper = sorted_numbers[middle]
+        median = (lower + upper) / 2
+    else:
+        median = sorted_numbers[middle]
+
+    return minimum, maximum, average, median, count
+
+minimum, maximum, average, median, count = get_stats(lengths)
+
+print(f'Min: {minimum}, Max: {maximum}')
+print(f'Average: {average}, Median: {median}, Count {count}')
+
+assert minimum == 60
+assert maximum == 73
+assert average == 67.5
+assert median == 68.5
+assert count == 10
+
+# Verify odd count median
+_, _, _, median, count = get_stats([1, 2, 3])
+assert median == 2
+assert count == 3
 
 
 # Example 5
-def flow_rate(weight_diff, time_diff):
-    return weight_diff / time_diff
+# Correct:
+minimum, maximum, average, median, count = get_stats(lengths)
 
-weight_diff = 0.5
-time_diff = 3
-flow = flow_rate(weight_diff, time_diff)
-print('%.3f kg per second' % flow)
-assert (flow - 0.16666666666666666) < 0.0001
+# Oops! Median and average swapped:
+minimum, maximum, median, average, count = get_stats(lengths)
 
 
 # Example 6
-def flow_rate(weight_diff, time_diff, period):
-    return (weight_diff / time_diff) * period
+minimum, maximum, average, median, count = get_stats(
+    lengths)
 
+minimum, maximum, average, median, count = \
+    get_stats(lengths)
 
-# Example 7
-flow_per_second = flow_rate(weight_diff, time_diff, 1)
-assert (flow_per_second - 0.16666666666666666) < 0.0001
+(minimum, maximum, average,
+ median, count) = get_stats(lengths)
 
-
-# Example 8
-def flow_rate(weight_diff, time_diff, period=1):
-    return (weight_diff / time_diff) * period
-
-
-# Example 9
-flow_per_second = flow_rate(weight_diff, time_diff)
-assert (flow_per_second - 0.16666666666666666) < 0.0001
-flow_per_hour = flow_rate(weight_diff, time_diff, period=3600)
-assert flow_per_hour == 600.0
-
-
-# Example 10
-def flow_rate(weight_diff, time_diff,
-              period=1, units_per_kg=1):
-    return ((weight_diff * units_per_kg) / time_diff) * period
-
-
-# Example 11
-pounds_per_hour = flow_rate(weight_diff, time_diff,
-                            period=3600, units_per_kg=2.2)
-print(pounds_per_hour)
-assert pounds_per_hour == 1320.0
-
-
-# Example 12
-pounds_per_hour = flow_rate(weight_diff, time_diff, 3600, 2.2)
-print(pounds_per_hour)
-assert pounds_per_hour == 1320.0
+(minimum, maximum, average, median, count
+    ) = get_stats(lengths)

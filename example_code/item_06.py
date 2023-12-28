@@ -1,6 +1,6 @@
-#!/usr/bin/env python3
+#!/usr/bin/env PYTHONHASHSEED=1234 python3
 
-# Copyright 2014 Brett Slatkin, Pearson Education Inc.
+# Copyright 2014-2019 Brett Slatkin, Pearson Education Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,32 +14,59 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Preamble to mimick book environment
+# Reproduce book environment
+import random
+random.seed(1234)
+
 import logging
 from pprint import pprint
 from sys import stdout as STDOUT
 
+# Write all output to a temporary directory
+import atexit
+import gc
+import io
+import os
+import tempfile
+
+TEST_DIR = tempfile.TemporaryDirectory()
+atexit.register(TEST_DIR.cleanup)
+
+# Make sure Windows processes exit cleanly
+OLD_CWD = os.getcwd()
+atexit.register(lambda: os.chdir(OLD_CWD))
+os.chdir(TEST_DIR.name)
+
+def close_open_files():
+    everything = gc.get_objects()
+    for obj in everything:
+        if isinstance(obj, io.IOBase):
+            obj.close()
+
+atexit.register(close_open_files)
+
 
 # Example 1
-a = ['red', 'orange', 'yellow', 'green', 'blue', 'purple']
-odds = a[::2]
-evens = a[1::2]
-print(odds)
-print(evens)
+snack_calories = {
+	'chips': 140,
+	'popcorn': 80,
+	'nuts': 190,
+}
+items = tuple(snack_calories.items())
+print(items)
 
 
 # Example 2
-x = b'mongoose'
-y = x[::-1]
-print(y)
+item = ('Peanut butter', 'Jelly')
+first = item[0]
+second = item[1]
+print(first, 'and', second)
 
 
 # Example 3
 try:
-    w = '謝謝'
-    x = w.encode('utf-8')
-    y = x[::-1]
-    z = y.decode('utf-8')
+    pair = ('Chocolate', 'Peanut butter')
+    pair[0] = 'Honey'
 except:
     logging.exception('Expected')
 else:
@@ -47,21 +74,62 @@ else:
 
 
 # Example 4
-a = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h']
-a[::2]   # ['a', 'c', 'e', 'g']
-a[::-2]  # ['h', 'f', 'd', 'b']
+item = ('Peanut butter', 'Jelly')
+first, second = item  # Unpacking
+print(first, 'and', second)
 
 
 # Example 5
-a[2::2]     # ['c', 'e', 'g']
-a[-2::-2]   # ['g', 'e', 'c', 'a']
-a[-2:2:-2]  # ['g', 'e']
-a[2:2:-2]   # []
+favorite_snacks = {
+	'salty': ('pretzels', 100),
+	'sweet': ('cookies', 180),
+	'veggie': ('carrots', 20),
+}
+
+((type1, (name1, cals1)),
+ (type2, (name2, cals2)),
+ (type3, (name3, cals3))) = favorite_snacks.items()
+
+print(f'Favorite {type1} is {name1} with {cals1} calories')
+print(f'Favorite {type2} is {name2} with {cals2} calories')
+print(f'Favorite {type3} is {name3} with {cals3} calories')
 
 
 # Example 6
-b = a[::2]   # ['a', 'c', 'e', 'g']
-c = b[1:-1]  # ['c', 'e']
-print(a)
-print(b)
-print(c)
+def bubble_sort(a):
+	for _ in range(len(a)):
+		for i in range(1, len(a)):
+			if a[i] < a[i-1]:
+				temp = a[i]
+				a[i] = a[i-1]
+				a[i-1] = temp
+
+names = ['pretzels', 'carrots', 'arugula', 'bacon']
+bubble_sort(names)
+print(names)
+
+
+# Example 7
+def bubble_sort(a):
+	for _ in range(len(a)):
+		for i in range(1, len(a)):
+			if a[i] < a[i-1]:
+				a[i-1], a[i] = a[i], a[i-1]  # Swap
+
+names = ['pretzels', 'carrots', 'arugula', 'bacon']
+bubble_sort(names)
+print(names)
+
+
+# Example 8
+snacks = [('bacon', 350), ('donut', 240), ('muffin', 190)]
+for i in range(len(snacks)):
+	item = snacks[i]
+	name = item[0]
+	calories = item[1]
+	print(f'#{i+1}: {name} has {calories} calories')
+
+
+# Example 9
+for rank, (name, calories) in enumerate(snacks, 1):
+	print(f'#{rank}: {name} has {calories} calories')

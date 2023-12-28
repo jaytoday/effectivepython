@@ -1,6 +1,6 @@
-#!/usr/bin/env python3
+#!/usr/bin/env PYTHONHASHSEED=1234 python3
 
-# Copyright 2014 Brett Slatkin, Pearson Education Inc.
+# Copyright 2014-2019 Brett Slatkin, Pearson Education Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,84 +14,100 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Preamble to mimick book environment
+# Reproduce book environment
+import random
+random.seed(1234)
+
 import logging
 from pprint import pprint
 from sys import stdout as STDOUT
 
+# Write all output to a temporary directory
+import atexit
+import gc
+import io
+import os
+import tempfile
+
+TEST_DIR = tempfile.TemporaryDirectory()
+atexit.register(TEST_DIR.cleanup)
+
+# Make sure Windows processes exit cleanly
+OLD_CWD = os.getcwd()
+atexit.register(lambda: os.chdir(OLD_CWD))
+os.chdir(TEST_DIR.name)
+
+def close_open_files():
+    everything = gc.get_objects()
+    for obj in everything:
+        if isinstance(obj, io.IOBase):
+            obj.close()
+
+atexit.register(close_open_files)
+
 
 # Example 1
-a = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h']
-print('First four:', a[:4])
-print('Last four: ', a[-4:])
-print('Middle two:', a[3:-3])
+from urllib.parse import parse_qs
+
+my_values = parse_qs('red=5&blue=0&green=',
+                     keep_blank_values=True)
+print(repr(my_values))
 
 
 # Example 2
-assert a[:5] == a[0:5]
+print('Red:     ', my_values.get('red'))
+print('Green:   ', my_values.get('green'))
+print('Opacity: ', my_values.get('opacity'))
 
 
 # Example 3
-assert a[5:] == a[5:len(a)]
+# For query string 'red=5&blue=0&green='
+red = my_values.get('red', [''])[0] or 0
+green = my_values.get('green', [''])[0] or 0
+opacity = my_values.get('opacity', [''])[0] or 0
+print(f'Red:     {red!r}')
+print(f'Green:   {green!r}')
+print(f'Opacity: {opacity!r}')
 
 
 # Example 4
-print(a[:5])
-print(a[:-1])
-print(a[4:])
-print(a[-3:])
-print(a[2:5])
-print(a[2:-1])
-print(a[-3:-1])
+red = int(my_values.get('red', [''])[0] or 0)
+green = int(my_values.get('green', [''])[0] or 0)
+opacity = int(my_values.get('opacity', [''])[0] or 0)
+print(f'Red:     {red!r}')
+print(f'Green:   {green!r}')
+print(f'Opacity: {opacity!r}')
 
 
 # Example 5
-a[:]      # ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h']
-a[:5]     # ['a', 'b', 'c', 'd', 'e']
-a[:-1]    # ['a', 'b', 'c', 'd', 'e', 'f', 'g']
-a[4:]     #                     ['e', 'f', 'g', 'h']
-a[-3:]    #                          ['f', 'g', 'h']
-a[2:5]    #           ['c', 'd', 'e']
-a[2:-1]   #           ['c', 'd', 'e', 'f', 'g']
-a[-3:-1]  #                          ['f', 'g']
+red_str = my_values.get('red', [''])
+red = int(red_str[0]) if red_str[0] else 0
+green_str = my_values.get('green', [''])
+green = int(green_str[0]) if green_str[0] else 0
+opacity_str = my_values.get('opacity', [''])
+opacity = int(opacity_str[0]) if opacity_str[0] else 0
+print(f'Red:     {red!r}')
+print(f'Green:   {green!r}')
+print(f'Opacity: {opacity!r}')
 
 
 # Example 6
-first_twenty_items = a[:20]
-last_twenty_items = a[-20:]
+green_str = my_values.get('green', [''])
+if green_str[0]:
+    green = int(green_str[0])
+else:
+    green = 0
+print(f'Green:   {green!r}')
 
 
 # Example 7
-try:
-    a[20]
-except:
-    logging.exception('Expected')
-else:
-    assert False
+def get_first_int(values, key, default=0):
+    found = values.get(key, [''])
+    if found[0]:
+        return int(found[0])
+    return default
 
 
 # Example 8
-b = a[4:]
-print('Before:   ', b)
-b[1] = 99
-print('After:    ', b)
-print('No change:', a)
-
-
-# Example 9
-print('Before ', a)
-a[2:7] = [99, 22, 14]
-print('After  ', a)
-
-
-# Example 10
-b = a[:]
-assert b == a and b is not a
-
-
-# Example 11
-b = a
-print('Before', a)
-a[:] = [101, 102, 103]
-assert a is b           # Still the same list object
-print('After ', a)      # Now has different contents
+green = get_first_int(my_values, 'green')
+print(f'Green:   {green!r}')

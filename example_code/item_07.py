@@ -1,6 +1,6 @@
-#!/usr/bin/env python3
+#!/usr/bin/env PYTHONHASHSEED=1234 python3
 
-# Copyright 2014 Brett Slatkin, Pearson Education Inc.
+# Copyright 2014-2019 Brett Slatkin, Pearson Education Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,36 +14,72 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Preamble to mimick book environment
+# Reproduce book environment
+import random
+random.seed(1234)
+
 import logging
 from pprint import pprint
 from sys import stdout as STDOUT
 
+# Write all output to a temporary directory
+import atexit
+import gc
+import io
+import os
+import tempfile
+
+TEST_DIR = tempfile.TemporaryDirectory()
+atexit.register(TEST_DIR.cleanup)
+
+# Make sure Windows processes exit cleanly
+OLD_CWD = os.getcwd()
+atexit.register(lambda: os.chdir(OLD_CWD))
+os.chdir(TEST_DIR.name)
+
+def close_open_files():
+    everything = gc.get_objects()
+    for obj in everything:
+        if isinstance(obj, io.IOBase):
+            obj.close()
+
+atexit.register(close_open_files)
+
 
 # Example 1
-a = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
-squares = [x**2 for x in a]
-print(squares)
+from random import randint
+
+random_bits = 0
+for i in range(32):
+    if randint(0, 1):
+        random_bits |= 1 << i
+
+print(bin(random_bits))
 
 
 # Example 2
-squares = map(lambda x: x ** 2, a)
-print(list(squares))
+flavor_list = ['vanilla', 'chocolate', 'pecan', 'strawberry']
+for flavor in flavor_list:
+    print(f'{flavor} is delicious')
 
 
 # Example 3
-even_squares = [x**2 for x in a if x % 2 == 0]
-print(even_squares)
+for i in range(len(flavor_list)):
+    flavor = flavor_list[i]
+    print(f'{i + 1}: {flavor}')
 
 
 # Example 4
-alt = map(lambda x: x**2, filter(lambda x: x % 2 == 0, a))
-assert even_squares == list(alt)
+it = enumerate(flavor_list)
+print(next(it))
+print(next(it))
 
 
 # Example 5
-chile_ranks = {'ghost': 1, 'habanero': 2, 'cayenne': 3}
-rank_dict = {rank: name for name, rank in chile_ranks.items()}
-chile_len_set = {len(name) for name in rank_dict.values()}
-print(rank_dict)
-print(chile_len_set)
+for i, flavor in enumerate(flavor_list):
+    print(f'{i + 1}: {flavor}')
+
+
+# Example 6
+for i, flavor in enumerate(flavor_list, 1):
+    print(f'{i}: {flavor}')

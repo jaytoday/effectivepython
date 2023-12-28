@@ -1,6 +1,6 @@
-#!/usr/bin/env python3
+#!/usr/bin/env PYTHONHASHSEED=1234 python3
 
-# Copyright 2014 Brett Slatkin, Pearson Education Inc.
+# Copyright 2014-2019 Brett Slatkin, Pearson Education Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,95 +14,116 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Preamble to mimick book environment
+# Reproduce book environment
+import random
+random.seed(1234)
+
 import logging
 from pprint import pprint
 from sys import stdout as STDOUT
 
+# Write all output to a temporary directory
+import atexit
+import gc
+import io
+import os
+import tempfile
+
+TEST_DIR = tempfile.TemporaryDirectory()
+atexit.register(TEST_DIR.cleanup)
+
+# Make sure Windows processes exit cleanly
+OLD_CWD = os.getcwd()
+atexit.register(lambda: os.chdir(OLD_CWD))
+os.chdir(TEST_DIR.name)
+
+def close_open_files():
+    everything = gc.get_objects()
+    for obj in everything:
+        if isinstance(obj, io.IOBase):
+            obj.close()
+
+atexit.register(close_open_files)
+
 
 # Example 1
-class OldResistor(object):
-    def __init__(self, ohms):
-        self._ohms = ohms
+stock = {
+    'nails': 125,
+    'screws': 35,
+    'wingnuts': 8,
+    'washers': 24,
+}
 
-    def get_ohms(self):
-        return self._ohms
+order = ['screws', 'wingnuts', 'clips']
 
-    def set_ohms(self, ohms):
-        self._ohms = ohms
+def get_batches(count, size):
+    return count // size
+
+result = {}
+for name in order:
+  count = stock.get(name, 0)
+  batches = get_batches(count, 8)
+  if batches:
+    result[name] = batches
+
+print(result)
 
 
 # Example 2
-r0 = OldResistor(50e3)
-print('Before: %5r' % r0.get_ohms())
-r0.set_ohms(10e3)
-print('After:  %5r' % r0.get_ohms())
+found = {name: get_batches(stock.get(name, 0), 8)
+         for name in order
+         if get_batches(stock.get(name, 0), 8)}
+print(found)
 
 
 # Example 3
-r0.set_ohms(r0.get_ohms() + 5e3)
+has_bug = {name: get_batches(stock.get(name, 0), 4)
+           for name in order
+           if get_batches(stock.get(name, 0), 8)}
+
+print('Expected:', found)
+print('Found:   ', has_bug)
 
 
 # Example 4
-class Resistor(object):
-    def __init__(self, ohms):
-        self.ohms = ohms
-        self.voltage = 0
-        self.current = 0
-
-r1 = Resistor(50e3)
-r1.ohms = 10e3
-print('%r ohms, %r volts, %r amps' %
-      (r1.ohms, r1.voltage, r1.current))
+found = {name: batches for name in order
+         if (batches := get_batches(stock.get(name, 0), 8))}
+assert found == {'screws': 4, 'wingnuts': 1}, found
 
 
 # Example 5
-r1.ohms += 5e3
+try:
+    result = {name: (tenth := count // 10)
+              for name, count in stock.items() if tenth > 0}
+except:
+    logging.exception('Expected')
+else:
+    assert False
 
 
 # Example 6
-class VoltageResistance(Resistor):
-    def __init__(self, ohms):
-        super().__init__(ohms)
-        self._voltage = 0
-
-    @property
-    def voltage(self):
-        return self._voltage
-
-    @voltage.setter
-    def voltage(self, voltage):
-        self._voltage = voltage
-        self.current = self._voltage / self.ohms
+result = {name: tenth for name, count in stock.items()
+          if (tenth := count // 10) > 0}
+print(result)
 
 
 # Example 7
-r2 = VoltageResistance(1e3)
-print('Before: %5r amps' % r2.current)
-r2.voltage = 10
-print('After:  %5r amps' % r2.current)
+half = [(last := count // 2) for count in stock.values()]
+print(f'Last item of {half} is {last}')
 
 
 # Example 8
-class BoundedResistance(Resistor):
-    def __init__(self, ohms):
-        super().__init__(ohms)
-
-    @property
-    def ohms(self):
-        return self._ohms
-
-    @ohms.setter
-    def ohms(self, ohms):
-        if ohms <= 0:
-            raise ValueError('%f ohms must be > 0' % ohms)
-        self._ohms = ohms
+for count in stock.values():  # Leaks loop variable
+    pass
+print(f'Last item of {list(stock.values())} is {count}')
 
 
 # Example 9
 try:
-    r3 = BoundedResistance(1e3)
-    r3.ohms = 0
+    del count
+    half = [count // 2 for count in stock.values()]
+    print(half)   # Works
+    print(count)  # Exception because loop variable didn't leak
 except:
     logging.exception('Expected')
 else:
@@ -110,55 +131,7 @@ else:
 
 
 # Example 10
-try:
-    BoundedResistance(-5)
-except:
-    logging.exception('Expected')
-else:
-    assert False
-
-
-# Example 11
-class FixedResistance(Resistor):
-    def __init__(self, ohms):
-        super().__init__(ohms)
-
-    @property
-    def ohms(self):
-        return self._ohms
-
-    @ohms.setter
-    def ohms(self, ohms):
-        if hasattr(self, '_ohms'):
-            raise AttributeError("Can't set attribute")
-        self._ohms = ohms
-
-
-# Example 12
-try:
-    r4 = FixedResistance(1e3)
-    r4.ohms = 2e3
-except:
-    logging.exception('Expected')
-else:
-    assert False
-
-
-# Example 13
-class MysteriousResistor(Resistor):
-    @property
-    def ohms(self):
-        self.voltage = self._ohms * self.current
-        return self._ohms
-
-    @ohms.setter
-    def ohms(self, ohms):
-        self._ohms = ohms
-
-
-# Example 14
-r7 = MysteriousResistor(10)
-r7.current = 0.01
-print('Before: %5r' % r7.voltage)
-r7.ohms
-print('After:  %5r' % r7.voltage)
+found = ((name, batches) for name in order
+         if (batches := get_batches(stock.get(name, 0), 8)))
+print(next(found))
+print(next(found))

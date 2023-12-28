@@ -1,6 +1,6 @@
-#!/usr/bin/env python3
+#!/usr/bin/env PYTHONHASHSEED=1234 python3
 
-# Copyright 2014 Brett Slatkin, Pearson Education Inc.
+# Copyright 2014-2019 Brett Slatkin, Pearson Education Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,125 +14,86 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Preamble to mimick book environment
+# Reproduce book environment
+import random
+random.seed(1234)
+
 import logging
 from pprint import pprint
 from sys import stdout as STDOUT
 
+# Write all output to a temporary directory
+import atexit
+import gc
+import io
+import os
+import tempfile
+
+TEST_DIR = tempfile.TemporaryDirectory()
+atexit.register(TEST_DIR.cleanup)
+
+# Make sure Windows processes exit cleanly
+OLD_CWD = os.getcwd()
+atexit.register(lambda: os.chdir(OLD_CWD))
+os.chdir(TEST_DIR.name)
+
+def close_open_files():
+    everything = gc.get_objects()
+    for obj in everything:
+        if isinstance(obj, io.IOBase):
+            obj.close()
+
+atexit.register(close_open_files)
+
 
 # Example 1
-def normalize(numbers):
-    total = sum(numbers)
-    result = []
-    for value in numbers:
-        percent = 100 * value / total
-        result.append(percent)
-    return result
+visits = {
+    'Mexico': {'Tulum', 'Puerto Vallarta'},
+    'Japan': {'Hakone'},
+}
 
 
 # Example 2
-visits = [15, 35, 80]
-percentages = normalize(visits)
-print(percentages)
+visits.setdefault('France', set()).add('Arles')  # Short
+
+if (japan := visits.get('Japan')) is None:       # Long
+    visits['Japan'] = japan = set()
+japan.add('Kyoto')
+original_print = print
+print = pprint
+
+print(visits)
+print = original_print
 
 
 # Example 3
-path = 'my_numbers.txt'
-with open(path, 'w') as f:
-    for i in (15, 35, 80):
-        f.write('%d\n' % i)
+class Visits:
+    def __init__(self):
+        self.data = {}
 
-def read_visits(data_path):
-    with open(data_path) as f:
-        for line in f:
-            yield int(line)
+    def add(self, country, city):
+        city_set = self.data.setdefault(country, set())
+        city_set.add(city)
 
 
 # Example 4
-it = read_visits('my_numbers.txt')
-percentages = normalize(it)
-print(percentages)
+visits = Visits()
+visits.add('Russia', 'Yekaterinburg')
+visits.add('Tanzania', 'Zanzibar')
+print(visits.data)
 
 
 # Example 5
-it = read_visits('my_numbers.txt')
-print(list(it))
-print(list(it))  # Already exhausted
+from collections import defaultdict
 
+class Visits:
+    def __init__(self):
+        self.data = defaultdict(set)
 
-# Example 6
-def normalize_copy(numbers):
-    numbers = list(numbers)  # Copy the iterator
-    total = sum(numbers)
-    result = []
-    for value in numbers:
-        percent = 100 * value / total
-        result.append(percent)
-    return result
+    def add(self, country, city):
+        self.data[country].add(city)
 
-
-# Example 7
-it = read_visits('my_numbers.txt')
-percentages = normalize_copy(it)
-print(percentages)
-
-
-# Example 8
-def normalize_func(get_iter):
-    total = sum(get_iter())   # New iterator
-    result = []
-    for value in get_iter():  # New iterator
-        percent = 100 * value / total
-        result.append(percent)
-    return result
-
-
-# Example 9
-percentages = normalize_func(lambda: read_visits(path))
-print(percentages)
-
-
-# Example 10
-class ReadVisits(object):
-    def __init__(self, data_path):
-        self.data_path = data_path
-
-    def __iter__(self):
-        with open(self.data_path) as f:
-            for line in f:
-                yield int(line)
-
-
-# Example 11
-visits = ReadVisits(path)
-percentages = normalize(visits)
-print(percentages)
-
-
-# Example 12
-def normalize_defensive(numbers):
-    if iter(numbers) is iter(numbers):  # An iterator -- bad!
-        raise TypeError('Must supply a container')
-    total = sum(numbers)
-    result = []
-    for value in numbers:
-        percent = 100 * value / total
-        result.append(percent)
-    return result
-
-
-# Example 13
-visits = [15, 35, 80]
-normalize_defensive(visits)  # No error
-visits = ReadVisits(path)
-normalize_defensive(visits)  # No error
-
-
-# Example 14
-try:
-    it = iter(visits)
-    normalize_defensive(it)
-except:
-    logging.exception('Expected')
-else:
-    assert False
+visits = Visits()
+visits.add('England', 'Bath')
+visits.add('England', 'London')
+print(visits.data)

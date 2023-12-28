@@ -1,6 +1,6 @@
-#!/usr/bin/env python3
+#!/usr/bin/env PYTHONHASHSEED=1234 python3
 
-# Copyright 2014 Brett Slatkin, Pearson Education Inc.
+# Copyright 2014-2019 Brett Slatkin, Pearson Education Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,116 +14,149 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Preamble to mimick book environment
+# Reproduce book environment
+import random
+random.seed(1234)
+
 import logging
 from pprint import pprint
 from sys import stdout as STDOUT
 
+# Write all output to a temporary directory
+import atexit
+import gc
+import io
+import os
+import tempfile
+
+TEST_DIR = tempfile.TemporaryDirectory()
+atexit.register(TEST_DIR.cleanup)
+
+# Make sure Windows processes exit cleanly
+OLD_CWD = os.getcwd()
+atexit.register(lambda: os.chdir(OLD_CWD))
+os.chdir(TEST_DIR.name)
+
+def close_open_files():
+    everything = gc.get_objects()
+    for obj in everything:
+        if isinstance(obj, io.IOBase):
+            obj.close()
+
+atexit.register(close_open_files)
+
 
 # Example 1
-import subprocess
-proc = subprocess.Popen(
-    ['echo', 'Hello from the child!'],
-    stdout=subprocess.PIPE)
-out, err = proc.communicate()
-print(out.decode('utf-8'))
+import itertools
 
 
 # Example 2
-from time import sleep, time
-proc = subprocess.Popen(['sleep', '0.3'])
-while proc.poll() is None:
-    print('Working...')
-    # Some time consuming work here
-    sleep(0.2)
-
-print('Exit status', proc.poll())
+it = itertools.chain([1, 2, 3], [4, 5, 6])
+print(list(it))
 
 
 # Example 3
-def run_sleep(period):
-    proc = subprocess.Popen(['sleep', str(period)])
-    return proc
-
-start = time()
-procs = []
-for _ in range(10):
-    proc = run_sleep(0.1)
-    procs.append(proc)
+it = itertools.repeat('hello', 3)
+print(list(it))
 
 
 # Example 4
-for proc in procs:
-    proc.communicate()
-end = time()
-print('Finished in %.3f seconds' % (end - start))
+it = itertools.cycle([1, 2])
+result = [next(it) for _ in range (10)]
+print(result)
 
 
 # Example 5
-import os
-
-def run_openssl(data):
-    env = os.environ.copy()
-    env['password'] = b'\xe24U\n\xd0Ql3S\x11'
-    proc = subprocess.Popen(
-        ['openssl', 'enc', '-des3', '-pass', 'env:password'],
-        env=env,
-        stdin=subprocess.PIPE,
-        stdout=subprocess.PIPE)
-    proc.stdin.write(data)
-    proc.stdin.flush()  # Ensure the child gets input
-    return proc
+it1, it2, it3 = itertools.tee(['first', 'second'], 3)
+print(list(it1))
+print(list(it2))
+print(list(it3))
 
 
 # Example 6
-import os
-procs = []
-for _ in range(3):
-    data = os.urandom(10)
-    proc = run_openssl(data)
-    procs.append(proc)
+keys = ['one', 'two', 'three']
+values = [1, 2]
+
+normal = list(zip(keys, values))
+print('zip:        ', normal)
+
+it = itertools.zip_longest(keys, values, fillvalue='nope')
+longest = list(it)
+print('zip_longest:', longest)
 
 
 # Example 7
-for proc in procs:
-    out, err = proc.communicate()
-    print(out[-10:])
+values = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+
+first_five = itertools.islice(values, 5)
+print('First five: ', list(first_five))
+
+middle_odds = itertools.islice(values, 2, 8, 2)
+print('Middle odds:', list(middle_odds))
 
 
 # Example 8
-def run_md5(input_stdin):
-    proc = subprocess.Popen(
-        ['md5'],
-        stdin=input_stdin,
-        stdout=subprocess.PIPE)
-    return proc
+values = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+less_than_seven = lambda x: x < 7
+it = itertools.takewhile(less_than_seven, values)
+print(list(it))
 
 
 # Example 9
-input_procs = []
-hash_procs = []
-for _ in range(3):
-    data = os.urandom(10)
-    proc = run_openssl(data)
-    input_procs.append(proc)
-    hash_proc = run_md5(proc.stdout)
-    hash_procs.append(hash_proc)
+values = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+less_than_seven = lambda x: x < 7
+it = itertools.dropwhile(less_than_seven, values)
+print(list(it))
 
 
 # Example 10
-for proc in input_procs:
-    proc.communicate()
-for proc in hash_procs:
-    out, err = proc.communicate()
-    print(out.strip())
+values = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+evens = lambda x: x % 2 == 0
+
+filter_result = filter(evens, values)
+print('Filter:      ', list(filter_result))
+
+filter_false_result = itertools.filterfalse(evens, values)
+print('Filter false:', list(filter_false_result))
 
 
 # Example 11
-proc = run_sleep(10)
-try:
-    proc.communicate(timeout=0.1)
-except subprocess.TimeoutExpired:
-    proc.terminate()
-    proc.wait()
+values = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+sum_reduce = itertools.accumulate(values)
+print('Sum:   ', list(sum_reduce))
 
-print('Exit status', proc.poll())
+def sum_modulo_20(first, second):
+    output = first + second
+    return output % 20
+
+modulo_reduce = itertools.accumulate(values, sum_modulo_20)
+print('Modulo:', list(modulo_reduce))
+
+
+# Example 12
+single = itertools.product([1, 2], repeat=2)
+print('Single:  ', list(single))
+
+multiple = itertools.product([1, 2], ['a', 'b'])
+print('Multiple:', list(multiple))
+
+
+# Example 13
+it = itertools.permutations([1, 2, 3, 4], 2)
+original_print = print
+print = pprint
+print(list(it))
+print = original_print
+
+
+# Example 14
+it = itertools.combinations([1, 2, 3, 4], 2)
+print(list(it))
+
+
+# Example 15
+it = itertools.combinations_with_replacement([1, 2, 3, 4], 2)
+original_print = print
+print = pprint
+print(list(it))
+print = original_print

@@ -1,6 +1,6 @@
-#!/usr/bin/env python3
+#!/usr/bin/env PYTHONHASHSEED=1234 python3
 
-# Copyright 2014 Brett Slatkin, Pearson Education Inc.
+# Copyright 2014-2019 Brett Slatkin, Pearson Education Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,99 +14,148 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Preamble to mimick book environment
+# Reproduce book environment
+import random
+random.seed(1234)
+
 import logging
 from pprint import pprint
 from sys import stdout as STDOUT
 
+# Write all output to a temporary directory
+import atexit
+import gc
+import io
+import os
+import tempfile
+
+TEST_DIR = tempfile.TemporaryDirectory()
+atexit.register(TEST_DIR.cleanup)
+
+# Make sure Windows processes exit cleanly
+OLD_CWD = os.getcwd()
+atexit.register(lambda: os.chdir(OLD_CWD))
+os.chdir(TEST_DIR.name)
+
+def close_open_files():
+    everything = gc.get_objects()
+    for obj in everything:
+        if isinstance(obj, io.IOBase):
+            obj.close()
+
+atexit.register(close_open_files)
+
 
 # Example 1
-names = ['Socrates', 'Archimedes', 'Plato', 'Aristotle']
-names.sort(key=lambda x: len(x))
-print(names)
+def remainder(number, divisor):
+    return number % divisor
+
+assert remainder(20, 7) == 6
 
 
 # Example 2
-from collections import defaultdict
-
-def log_missing():
-    print('Key added')
-    return 0
+remainder(20, 7)
+remainder(20, divisor=7)
+remainder(number=20, divisor=7)
+remainder(divisor=7, number=20)
 
 
 # Example 3
-current = {'green': 12, 'blue': 3}
-increments = [
-    ('red', 5),
-    ('blue', 17),
-    ('orange', 9),
-]
-result = defaultdict(log_missing, current)
-print('Before:', dict(result))
-for key, amount in increments:
-    result[key] += amount
-print('After: ', dict(result))
+try:
+    # This will not compile
+    source = """remainder(number=20, 7)"""
+    eval(source)
+except:
+    logging.exception('Expected')
+else:
+    assert False
 
 
 # Example 4
-def increment_with_report(current, increments):
-    added_count = 0
-
-    def missing():
-        nonlocal added_count  # Stateful closure
-        added_count += 1
-        return 0
-
-    result = defaultdict(missing, current)
-    for key, amount in increments:
-        result[key] += amount
-
-    return result, added_count
+try:
+    remainder(20, number=7)
+except:
+    logging.exception('Expected')
+else:
+    assert False
 
 
 # Example 5
-result, count = increment_with_report(current, increments)
-assert count == 2
-print(result)
+my_kwargs = {
+	'number': 20,
+	'divisor': 7,
+}
+assert remainder(**my_kwargs) == 6
 
 
 # Example 6
-class CountMissing(object):
-    def __init__(self):
-        self.added = 0
-
-    def missing(self):
-        self.added += 1
-        return 0
+my_kwargs = {
+	'divisor': 7,
+}
+assert remainder(number=20, **my_kwargs) == 6
 
 
 # Example 7
-counter = CountMissing()
-result = defaultdict(counter.missing, current)  # Method reference
-for key, amount in increments:
-    result[key] += amount
-assert counter.added == 2
-print(result)
+my_kwargs = {
+	'number': 20,
+}
+other_kwargs = {
+	'divisor': 7,
+}
+assert remainder(**my_kwargs, **other_kwargs) == 6
 
 
 # Example 8
-class BetterCountMissing(object):
-    def __init__(self):
-        self.added = 0
+def print_parameters(**kwargs):
+    for key, value in kwargs.items():
+        print(f'{key} = {value}')
 
-    def __call__(self):
-        self.added += 1
-        return 0
-
-counter = BetterCountMissing()
-counter()
-assert callable(counter)
+print_parameters(alpha=1.5, beta=9, gamma=4)
 
 
 # Example 9
-counter = BetterCountMissing()
-result = defaultdict(counter, current)  # Relies on __call__
-for key, amount in increments:
-    result[key] += amount
-assert counter.added == 2
-print(result)
+def flow_rate(weight_diff, time_diff):
+    return weight_diff / time_diff
+
+weight_diff = 0.5
+time_diff = 3
+flow = flow_rate(weight_diff, time_diff)
+print(f'{flow:.3} kg per second')
+
+
+# Example 10
+def flow_rate(weight_diff, time_diff, period):
+    return (weight_diff / time_diff) * period
+
+
+# Example 11
+flow_per_second = flow_rate(weight_diff, time_diff, 1)
+
+
+# Example 12
+def flow_rate(weight_diff, time_diff, period=1):
+    return (weight_diff / time_diff) * period
+
+
+# Example 13
+flow_per_second = flow_rate(weight_diff, time_diff)
+flow_per_hour = flow_rate(weight_diff, time_diff, period=3600)
+print(flow_per_second)
+print(flow_per_hour)
+
+
+# Example 14
+def flow_rate(weight_diff, time_diff,
+              period=1, units_per_kg=1):
+    return ((weight_diff * units_per_kg) / time_diff) * period
+
+
+# Example 15
+pounds_per_hour = flow_rate(weight_diff, time_diff,
+                            period=3600, units_per_kg=2.2)
+print(pounds_per_hour)
+
+
+# Example 16
+pounds_per_hour = flow_rate(weight_diff, time_diff, 3600, 2.2)
+print(pounds_per_hour)

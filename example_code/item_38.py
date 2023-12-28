@@ -1,6 +1,6 @@
-#!/usr/bin/env python3
+#!/usr/bin/env PYTHONHASHSEED=1234 python3
 
-# Copyright 2014 Brett Slatkin, Pearson Education Inc.
+# Copyright 2014-2019 Brett Slatkin, Pearson Education Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,93 +14,125 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Preamble to mimick book environment
+# Reproduce book environment
+import random
+random.seed(1234)
+
 import logging
 from pprint import pprint
 from sys import stdout as STDOUT
 
+# Write all output to a temporary directory
+import atexit
+import gc
+import io
+import os
+import tempfile
+
+TEST_DIR = tempfile.TemporaryDirectory()
+atexit.register(TEST_DIR.cleanup)
+
+# Make sure Windows processes exit cleanly
+OLD_CWD = os.getcwd()
+atexit.register(lambda: os.chdir(OLD_CWD))
+os.chdir(TEST_DIR.name)
+
+def close_open_files():
+    everything = gc.get_objects()
+    for obj in everything:
+        if isinstance(obj, io.IOBase):
+            obj.close()
+
+atexit.register(close_open_files)
+
 
 # Example 1
-class Counter(object):
-    def __init__(self):
-        self.count = 0
-
-    def increment(self, offset):
-        self.count += offset
+names = ['Socrates', 'Archimedes', 'Plato', 'Aristotle']
+names.sort(key=len)
+print(names)
 
 
 # Example 2
-def worker(sensor_index, how_many, counter):
-    # I have a barrier in here so the workers synchronize
-    # when they start counting, otherwise it's hard to get a race
-    # because the overhead of starting a thread is high.
-    BARRIER.wait()
-    for _ in range(how_many):
-        # Read from the sensor
-        counter.increment(1)
+def log_missing():
+    print('Key added')
+    return 0
 
 
 # Example 3
-from threading import Barrier, Thread
-BARRIER = Barrier(5)
-def run_threads(func, how_many, counter):
-    threads = []
-    for i in range(5):
-        args = (i, how_many, counter)
-        thread = Thread(target=func, args=args)
-        threads.append(thread)
-        thread.start()
-    for thread in threads:
-        thread.join()
+from collections import defaultdict
+
+current = {'green': 12, 'blue': 3}
+increments = [
+    ('red', 5),
+    ('blue', 17),
+    ('orange', 9),
+]
+result = defaultdict(log_missing, current)
+print('Before:', dict(result))
+for key, amount in increments:
+    result[key] += amount
+print('After: ', dict(result))
 
 
 # Example 4
-how_many = 10**5
-counter = Counter()
-run_threads(worker, how_many, counter)
-print('Counter should be %d, found %d' %
-      (5 * how_many, counter.count))
+def increment_with_report(current, increments):
+    added_count = 0
+
+    def missing():
+        nonlocal added_count  # Stateful closure
+        added_count += 1
+        return 0
+
+    result = defaultdict(missing, current)
+    for key, amount in increments:
+        result[key] += amount
+
+    return result, added_count
 
 
 # Example 5
-offset = 5
-counter.count += offset
+result, count = increment_with_report(current, increments)
+assert count == 2
+print(result)
 
 
 # Example 6
-value = getattr(counter, 'count')
-result = value + offset
-setattr(counter, 'count', result)
+class CountMissing:
+    def __init__(self):
+        self.added = 0
+
+    def missing(self):
+        self.added += 1
+        return 0
 
 
 # Example 7
-# Running in Thread A
-value_a = getattr(counter, 'count')
-# Context switch to Thread B
-value_b = getattr(counter, 'count')
-result_b = value_b + 1
-setattr(counter, 'count', result_b)
-# Context switch back to Thread A
-result_a = value_a + 1
-setattr(counter, 'count', result_a)
+counter = CountMissing()
+result = defaultdict(counter.missing, current)  # Method ref
+for key, amount in increments:
+    result[key] += amount
+assert counter.added == 2
+print(result)
 
 
 # Example 8
-from threading import Lock
-
-class LockingCounter(object):
+class BetterCountMissing:
     def __init__(self):
-        self.lock = Lock()
-        self.count = 0
+        self.added = 0
 
-    def increment(self, offset):
-        with self.lock:
-            self.count += offset
+    def __call__(self):
+        self.added += 1
+        return 0
+
+counter = BetterCountMissing()
+assert counter() == 0
+assert callable(counter)
 
 
 # Example 9
-BARRIER = Barrier(5)
-counter = LockingCounter()
-run_threads(worker, how_many, counter)
-print('Counter should be %d, found %d' %
-      (5 * how_many, counter.count))
+counter = BetterCountMissing()
+result = defaultdict(counter, current)  # Relies on __call__
+for key, amount in increments:
+    result[key] += amount
+assert counter.added == 2
+print(result)

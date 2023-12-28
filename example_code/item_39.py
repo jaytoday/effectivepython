@@ -1,6 +1,6 @@
-#!/usr/bin/env python3
+#!/usr/bin/env PYTHONHASHSEED=1234 python3
 
-# Copyright 2014 Brett Slatkin, Pearson Education Inc.
+# Copyright 2014-2019 Brett Slatkin, Pearson Education Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,235 +14,196 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Preamble to mimick book environment
+# Reproduce book environment
+import random
+random.seed(1234)
+
 import logging
 from pprint import pprint
 from sys import stdout as STDOUT
 
+# Write all output to a temporary directory
+import atexit
+import gc
+import io
+import os
+import tempfile
+
+TEST_DIR = tempfile.TemporaryDirectory()
+atexit.register(TEST_DIR.cleanup)
+
+# Make sure Windows processes exit cleanly
+OLD_CWD = os.getcwd()
+atexit.register(lambda: os.chdir(OLD_CWD))
+os.chdir(TEST_DIR.name)
+
+def close_open_files():
+    everything = gc.get_objects()
+    for obj in everything:
+        if isinstance(obj, io.IOBase):
+            obj.close()
+
+atexit.register(close_open_files)
+
 
 # Example 1
-def download(item):
-    return item
-
-def resize(item):
-    return item
-
-def upload(item):
-    return item
+class InputData:
+    def read(self):
+        raise NotImplementedError
 
 
 # Example 2
-from threading import Lock
-from collections import deque
+class PathInputData(InputData):
+    def __init__(self, path):
+        super().__init__()
+        self.path = path
 
-class MyQueue(object):
-    def __init__(self):
-        self.items = deque()
-        self.lock = Lock()
+    def read(self):
+        with open(self.path) as f:
+            return f.read()
 
 
 # Example 3
-    def put(self, item):
-        with self.lock:
-            self.items.append(item)
+class Worker:
+    def __init__(self, input_data):
+        self.input_data = input_data
+        self.result = None
+
+    def map(self):
+        raise NotImplementedError
+
+    def reduce(self, other):
+        raise NotImplementedError
 
 
 # Example 4
-    def get(self):
-        with self.lock:
-            return self.items.popleft()
+class LineCountWorker(Worker):
+    def map(self):
+        data = self.input_data.read()
+        self.result = data.count('\n')
+
+    def reduce(self, other):
+        self.result += other.result
 
 
 # Example 5
-from threading import Thread
-from time import sleep
+import os
 
-class Worker(Thread):
-    def __init__(self, func, in_queue, out_queue):
-        super().__init__()
-        self.func = func
-        self.in_queue = in_queue
-        self.out_queue = out_queue
-        self.polled_count = 0
-        self.work_done = 0
+def generate_inputs(data_dir):
+    for name in os.listdir(data_dir):
+        yield PathInputData(os.path.join(data_dir, name))
 
 
 # Example 6
-    def run(self):
-        while True:
-            self.polled_count += 1
-            try:
-                item = self.in_queue.get()
-            except IndexError:
-                sleep(0.01)  # No work to do
-            except AttributeError:
-                # The magic exit signal
-                return
-            else:
-                result = self.func(item)
-                self.out_queue.put(result)
-                self.work_done += 1
+def create_workers(input_list):
+    workers = []
+    for input_data in input_list:
+        workers.append(LineCountWorker(input_data))
+    return workers
 
 
 # Example 7
-download_queue = MyQueue()
-resize_queue = MyQueue()
-upload_queue = MyQueue()
-done_queue = MyQueue()
-threads = [
-    Worker(download, download_queue, resize_queue),
-    Worker(resize, resize_queue, upload_queue),
-    Worker(upload, upload_queue, done_queue),
-]
+from threading import Thread
+
+def execute(workers):
+    threads = [Thread(target=w.map) for w in workers]
+    for thread in threads: thread.start()
+    for thread in threads: thread.join()
+
+    first, *rest = workers
+    for worker in rest:
+        first.reduce(worker)
+    return first.result
 
 
 # Example 8
-for thread in threads:
-    thread.start()
-for _ in range(1000):
-    download_queue.put(object())
+def mapreduce(data_dir):
+    inputs = generate_inputs(data_dir)
+    workers = create_workers(inputs)
+    return execute(workers)
 
 
 # Example 9
-import time
-while len(done_queue.items) < 1000:
-    # Do something useful while waiting
-    time.sleep(0.1)
-# Stop all the threads by causing an exception in their
-# run methods.
-for thread in threads:
-    thread.in_queue = None
+import os
+import random
+
+def write_test_files(tmpdir):
+    os.makedirs(tmpdir)
+    for i in range(100):
+        with open(os.path.join(tmpdir, str(i)), 'w') as f:
+            f.write('\n' * random.randint(0, 100))
+
+tmpdir = 'test_inputs'
+write_test_files(tmpdir)
+
+result = mapreduce(tmpdir)
+print(f'There are {result} lines')
 
 
 # Example 10
-processed = len(done_queue.items)
-polled = sum(t.polled_count for t in threads)
-print('Processed', processed, 'items after polling',
-      polled, 'times')
+class GenericInputData:
+    def read(self):
+        raise NotImplementedError
+
+    @classmethod
+    def generate_inputs(cls, config):
+        raise NotImplementedError
 
 
 # Example 11
-from queue import Queue
-queue = Queue()
+class PathInputData(GenericInputData):
+    def __init__(self, path):
+        super().__init__()
+        self.path = path
 
-def consumer():
-    print('Consumer waiting')
-    queue.get()                # Runs after put() below
-    print('Consumer done')
+    def read(self):
+        with open(self.path) as f:
+            return f.read()
 
-thread = Thread(target=consumer)
-thread.start()
+    @classmethod
+    def generate_inputs(cls, config):
+        data_dir = config['data_dir']
+        for name in os.listdir(data_dir):
+            yield cls(os.path.join(data_dir, name))
 
 
 # Example 12
-print('Producer putting')
-queue.put(object())            # Runs before get() above
-thread.join()
-print('Producer done')
+class GenericWorker:
+    def __init__(self, input_data):
+        self.input_data = input_data
+        self.result = None
+
+    def map(self):
+        raise NotImplementedError
+
+    def reduce(self, other):
+        raise NotImplementedError
+
+    @classmethod
+    def create_workers(cls, input_class, config):
+        workers = []
+        for input_data in input_class.generate_inputs(config):
+            workers.append(cls(input_data))
+        return workers
 
 
 # Example 13
-queue = Queue(1)               # Buffer size of 1
+class LineCountWorker(GenericWorker):
+    def map(self):
+        data = self.input_data.read()
+        self.result = data.count('\n')
 
-def consumer():
-    time.sleep(0.1)            # Wait
-    queue.get()                # Runs second
-    print('Consumer got 1')
-    queue.get()                # Runs fourth
-    print('Consumer got 2')
-
-thread = Thread(target=consumer)
-thread.start()
+    def reduce(self, other):
+        self.result += other.result
 
 
 # Example 14
-queue.put(object())            # Runs first
-print('Producer put 1')
-queue.put(object())            # Runs third
-print('Producer put 2')
-thread.join()
-print('Producer done')
+def mapreduce(worker_class, input_class, config):
+    workers = worker_class.create_workers(input_class, config)
+    return execute(workers)
 
 
 # Example 15
-in_queue = Queue()
-
-def consumer():
-    print('Consumer waiting')
-    work = in_queue.get()      # Done second
-    print('Consumer working')
-    # Doing work
-    print('Consumer done')
-    in_queue.task_done()       # Done third
-
-Thread(target=consumer).start()
-
-
-# Example 16
-in_queue.put(object())         # Done first
-print('Producer waiting')
-in_queue.join()                # Done fourth
-print('Producer done')
-
-
-# Example 17
-class ClosableQueue(Queue):
-    SENTINEL = object()
-
-    def close(self):
-        self.put(self.SENTINEL)
-
-
-# Example 18
-    def __iter__(self):
-        while True:
-            item = self.get()
-            try:
-                if item is self.SENTINEL:
-                    return  # Cause the thread to exit
-                yield item
-            finally:
-                self.task_done()
-
-
-# Example 19
-class StoppableWorker(Thread):
-    def __init__(self, func, in_queue, out_queue):
-        super().__init__()
-        self.func = func
-        self.in_queue = in_queue
-        self.out_queue = out_queue
-
-    def run(self):
-        for item in self.in_queue:
-            result = self.func(item)
-            self.out_queue.put(result)
-
-
-# Example 20
-download_queue = ClosableQueue()
-resize_queue = ClosableQueue()
-upload_queue = ClosableQueue()
-done_queue = ClosableQueue()
-threads = [
-    StoppableWorker(download, download_queue, resize_queue),
-    StoppableWorker(resize, resize_queue, upload_queue),
-    StoppableWorker(upload, upload_queue, done_queue),
-]
-
-
-# Example 21
-for thread in threads:
-    thread.start()
-for _ in range(1000):
-    download_queue.put(object())
-download_queue.close()
-
-
-# Example 22
-download_queue.join()
-resize_queue.close()
-resize_queue.join()
-upload_queue.close()
-upload_queue.join()
-print(done_queue.qsize(), 'items finished')
+config = {'data_dir': tmpdir}
+result = mapreduce(LineCountWorker, PathInputData, config)
+print(f'There are {result} lines')

@@ -1,6 +1,6 @@
-#!/usr/bin/env python3
+#!/usr/bin/env PYTHONHASHSEED=1234 python3
 
-# Copyright 2014 Brett Slatkin, Pearson Education Inc.
+# Copyright 2014-2019 Brett Slatkin, Pearson Education Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,92 +14,134 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Preamble to mimick book environment
+# Reproduce book environment
+import random
+random.seed(1234)
+
 import logging
 from pprint import pprint
 from sys import stdout as STDOUT
 
+# Write all output to a temporary directory
+import atexit
+import gc
+import io
+import os
+import tempfile
+
+TEST_DIR = tempfile.TemporaryDirectory()
+atexit.register(TEST_DIR.cleanup)
+
+# Make sure Windows processes exit cleanly
+OLD_CWD = os.getcwd()
+atexit.register(lambda: os.chdir(OLD_CWD))
+os.chdir(TEST_DIR.name)
+
+def close_open_files():
+    everything = gc.get_objects()
+    for obj in everything:
+        if isinstance(obj, io.IOBase):
+            obj.close()
+
+atexit.register(close_open_files)
+
 
 # Example 1
-handle = open('random_data.txt', 'w', encoding='utf-8')
-handle.write('success\nand\nnew\nlines')
-handle.close()
-handle = open('random_data.txt')  # May raise IOError
 try:
-    data = handle.read()  # May raise UnicodeDecodeError
-finally:
-    handle.close()        # Always runs after try:
+    car_ages = [0, 9, 4, 8, 7, 20, 19, 1, 6, 15]
+    car_ages_descending = sorted(car_ages, reverse=True)
+    oldest, second_oldest = car_ages_descending
+except:
+    logging.exception('Expected')
+else:
+    assert False
 
 
 # Example 2
-import json
-
-def load_json_key(data, key):
-    try:
-        result_dict = json.loads(data)  # May raise ValueError
-    except ValueError as e:
-        raise KeyError from e
-    else:
-        return result_dict[key]         # May raise KeyError
-
-# JSON decode successful
-assert load_json_key('{"foo": "bar"}', 'foo') == 'bar'
-try:
-    load_json_key('{"foo": "bar"}', 'does not exist')
-    assert False
-except KeyError:
-    pass  # Expected
-
-# JSON decode fails
-try:
-    load_json_key('{"foo": bad payload', 'foo')
-    assert False
-except KeyError:
-    pass  # Expected
+oldest = car_ages_descending[0]
+second_oldest = car_ages_descending[1]
+others = car_ages_descending[2:]
+print(oldest, second_oldest, others)
 
 
 # Example 3
-import json
-UNDEFINED = object()
+oldest, second_oldest, *others = car_ages_descending
+print(oldest, second_oldest, others)
 
-def divide_json(path):
-    handle = open(path, 'r+')   # May raise IOError
-    try:
-        data = handle.read()    # May raise UnicodeDecodeError
-        op = json.loads(data)   # May raise ValueError
-        value = (
-            op['numerator'] /
-            op['denominator'])  # May raise ZeroDivisionError
-    except ZeroDivisionError as e:
-        return UNDEFINED
-    else:
-        op['result'] = value
-        result = json.dumps(op)
-        handle.seek(0)
-        handle.write(result)    # May raise IOError
-        return value
-    finally:
-        handle.close()          # Always runs
 
-# Everything works
-temp_path = 'random_data.json'
-handle = open(temp_path, 'w')
-handle.write('{"numerator": 1, "denominator": 10}')
-handle.close()
-assert divide_json(temp_path) == 0.1
+# Example 4
+oldest, *others, youngest = car_ages_descending
+print(oldest, youngest, others)
 
-# Divide by Zero error
-handle = open(temp_path, 'w')
-handle.write('{"numerator": 1, "denominator": 0}')
-handle.close()
-assert divide_json(temp_path) is UNDEFINED
+*others, second_youngest, youngest = car_ages_descending
+print(youngest, second_youngest, others)
 
-# JSON decode error
-handle = open(temp_path, 'w')
-handle.write('{"numerator": 1 bad data')
-handle.close()
+
+# Example 5
 try:
-    divide_json(temp_path)
+    # This will not compile
+    source = """*others = car_ages_descending"""
+    eval(source)
+except:
+    logging.exception('Expected')
+else:
     assert False
-except ValueError:
-    pass  # Expected
+
+
+# Example 6
+try:
+    # This will not compile
+    source = """first, *middle, *second_middle, last = [1, 2, 3, 4]"""
+    eval(source)
+except:
+    logging.exception('Expected')
+else:
+    assert False
+
+
+# Example 7
+car_inventory = {
+	'Downtown': ('Silver Shadow', 'Pinto', 'DMC'),
+	'Airport': ('Skyline', 'Viper', 'Gremlin', 'Nova'),
+}
+
+((loc1, (best1, *rest1)),
+ (loc2, (best2, *rest2))) = car_inventory.items()
+
+print(f'Best at {loc1} is {best1}, {len(rest1)} others')
+print(f'Best at {loc2} is {best2}, {len(rest2)} others')
+
+
+# Example 8
+short_list = [1, 2]
+first, second, *rest = short_list
+print(first, second, rest)
+
+
+# Example 9
+it = iter(range(1, 3))
+first, second = it
+print(f'{first} and {second}')
+
+
+# Example 10
+def generate_csv():
+	yield ('Date', 'Make' , 'Model', 'Year', 'Price')
+	for i in range(100):
+		yield ('2019-03-25', 'Honda', 'Fit' , '2010', '$3400')
+		yield ('2019-03-26', 'Ford', 'F150' , '2008', '$2400')
+
+
+# Example 11
+all_csv_rows = list(generate_csv())
+header = all_csv_rows[0]
+rows = all_csv_rows[1:]
+print('CSV Header:', header)
+print('Row count: ', len(rows))
+
+
+# Example 12
+it = generate_csv()
+header, *rows = it
+print('CSV Header:', header)
+print('Row count: ', len(rows))

@@ -1,6 +1,6 @@
-#!/usr/bin/env python3
+#!/usr/bin/env PYTHONHASHSEED=1234 python3
 
-# Copyright 2014 Brett Slatkin, Pearson Education Inc.
+# Copyright 2014-2019 Brett Slatkin, Pearson Education Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,124 +14,214 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Preamble to mimick book environment
+# Reproduce book environment
+import random
+random.seed(1234)
+
 import logging
 from pprint import pprint
 from sys import stdout as STDOUT
 
+# Write all output to a temporary directory
+import atexit
+import gc
+import io
+import os
+import tempfile
+
+TEST_DIR = tempfile.TemporaryDirectory()
+atexit.register(TEST_DIR.cleanup)
+
+# Make sure Windows processes exit cleanly
+OLD_CWD = os.getcwd()
+atexit.register(lambda: os.chdir(OLD_CWD))
+os.chdir(TEST_DIR.name)
+
+def close_open_files():
+    everything = gc.get_objects()
+    for obj in everything:
+        if isinstance(obj, io.IOBase):
+            obj.close()
+
+atexit.register(close_open_files)
+
 
 # Example 1
-from collections import deque
-fifo = deque()
-fifo.append(1)      # Producer
-fifo.append(2)
-fifo.append(3)
-x = fifo.popleft()  # Consumer
-print(x)
+class Homework:
+    def __init__(self):
+        self._grade = 0
+
+    @property
+    def grade(self):
+        return self._grade
+
+    @grade.setter
+    def grade(self, value):
+        if not (0 <= value <= 100):
+            raise ValueError(
+                'Grade must be between 0 and 100')
+        self._grade = value
 
 
 # Example 2
-a = {}
-a['foo'] = 1
-a['bar'] = 2
-from random import randint
-
-# Randomly populate 'b' to cause hash conflicts
-while True:
-    z = randint(99, 1013)
-    b = {}
-    for i in range(z):
-        b[i] = i
-    b['foo'] = 1
-    b['bar'] = 2
-    for i in range(z):
-        del b[i]
-    if str(b) != str(a):
-        break
-
-print(a)
-print(b)
-print('Equal?', a == b)
+galileo = Homework()
+galileo.grade = 95
+assert galileo.grade == 95
 
 
 # Example 3
-from collections import OrderedDict
-a = OrderedDict()
-a['foo'] = 1
-a['bar'] = 2
+class Exam:
+    def __init__(self):
+        self._writing_grade = 0
+        self._math_grade = 0
 
-b = OrderedDict()
-b['foo'] = 'red'
-b['bar'] = 'blue'
-
-for value1, value2 in zip(a.values(), b.values()):
-    print(value1, value2)
+    @staticmethod
+    def _check_grade(value):
+        if not (0 <= value <= 100):
+            raise ValueError(
+                'Grade must be between 0 and 100')
 
 
 # Example 4
-stats = {}
-key = 'my_counter'
-if key not in stats:
-    stats[key] = 0
-stats[key] += 1
-print(stats)
+    @property
+    def writing_grade(self):
+        return self._writing_grade
+
+    @writing_grade.setter
+    def writing_grade(self, value):
+        self._check_grade(value)
+        self._writing_grade = value
+
+    @property
+    def math_grade(self):
+        return self._math_grade
+
+    @math_grade.setter
+    def math_grade(self, value):
+        self._check_grade(value)
+        self._math_grade = value
+
+galileo = Exam()
+galileo.writing_grade = 85
+galileo.math_grade = 99
+
+assert galileo.writing_grade == 85
+assert galileo.math_grade == 99
 
 
 # Example 5
-from collections import defaultdict
-stats = defaultdict(int)
-stats['my_counter'] += 1
-print(dict(stats))
+class Grade:
+    def __get__(self, instance, instance_type):
+        pass
+
+    def __set__(self, instance, value):
+        pass
+
+class Exam:
+    # Class attributes
+    math_grade = Grade()
+    writing_grade = Grade()
+    science_grade = Grade()
 
 
 # Example 6
-from heapq import *
-a = []
-heappush(a, 5)
-heappush(a, 3)
-heappush(a, 7)
-heappush(a, 4)
+exam = Exam()
+exam.writing_grade = 40
 
 
 # Example 7
-print(heappop(a), heappop(a), heappop(a), heappop(a))
+Exam.__dict__['writing_grade'].__set__(exam, 40)
 
 
 # Example 8
-a = []
-heappush(a, 5)
-heappush(a, 3)
-heappush(a, 7)
-heappush(a, 4)
-assert a[0] == nsmallest(1, a)[0] == 3
+exam.writing_grade
 
 
 # Example 9
-print('Before:', a)
-a.sort()
-print('After: ', a)
+Exam.__dict__['writing_grade'].__get__(exam, Exam)
 
 
 # Example 10
-x = list(range(10**6))
-i = x.index(991234)
-print(i)
+class Grade:
+    def __init__(self):
+        self._value = 0
+
+    def __get__(self, instance, instance_type):
+        return self._value
+
+    def __set__(self, instance, value):
+        if not (0 <= value <= 100):
+            raise ValueError(
+                'Grade must be between 0 and 100')
+        self._value = value
 
 
 # Example 11
-from bisect import bisect_left
-i = bisect_left(x, 991234)
-print(i)
+class Exam:
+    math_grade = Grade()
+    writing_grade = Grade()
+    science_grade = Grade()
+
+first_exam = Exam()
+first_exam.writing_grade = 82
+first_exam.science_grade = 99
+print('Writing', first_exam.writing_grade)
+print('Science', first_exam.science_grade)
 
 
 # Example 12
-from timeit import timeit
-print(timeit(
-    'a.index(len(a)-1)',
-    'a = list(range(100))',
-    number=1000))
-print(timeit(
-    'bisect_left(a, len(a)-1)',
-    'from bisect import bisect_left;'
-    'a = list(range(10**6))',
-    number=1000))
+second_exam = Exam()
+second_exam.writing_grade = 75
+print(f'Second {second_exam.writing_grade} is right')
+print(f'First  {first_exam.writing_grade} is wrong; '
+      f'should be 82')
+
+
+# Example 13
+class Grade:
+    def __init__(self):
+        self._values = {}
+
+    def __get__(self, instance, instance_type):
+        if instance is None:
+            return self
+        return self._values.get(instance, 0)
+
+    def __set__(self, instance, value):
+        if not (0 <= value <= 100):
+            raise ValueError(
+                'Grade must be between 0 and 100')
+        self._values[instance] = value
+
+
+# Example 14
+from weakref import WeakKeyDictionary
+
+class Grade:
+    def __init__(self):
+        self._values = WeakKeyDictionary()
+
+    def __get__(self, instance, instance_type):
+        if instance is None:
+            return self
+        return self._values.get(instance, 0)
+
+    def __set__(self, instance, value):
+        if not (0 <= value <= 100):
+            raise ValueError(
+                'Grade must be between 0 and 100')
+        self._values[instance] = value
+
+
+# Example 15
+class Exam:
+    math_grade = Grade()
+    writing_grade = Grade()
+    science_grade = Grade()
+
+first_exam = Exam()
+first_exam.writing_grade = 82
+second_exam = Exam()
+second_exam.writing_grade = 75
+print(f'First  {first_exam.writing_grade} is right')
+print(f'Second {second_exam.writing_grade} is right')

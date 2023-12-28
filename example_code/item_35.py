@@ -1,6 +1,6 @@
-#!/usr/bin/env python3
+#!/usr/bin/env PYTHONHASHSEED=1234 python3
 
-# Copyright 2014 Brett Slatkin, Pearson Education Inc.
+# Copyright 2014-2019 Brett Slatkin, Pearson Education Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,82 +14,144 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Preamble to mimick book environment
+# Reproduce book environment
+import random
+random.seed(1234)
+
 import logging
 from pprint import pprint
 from sys import stdout as STDOUT
 
+# Write all output to a temporary directory
+import atexit
+import gc
+import io
+import os
+import tempfile
+
+TEST_DIR = tempfile.TemporaryDirectory()
+atexit.register(TEST_DIR.cleanup)
+
+# Make sure Windows processes exit cleanly
+OLD_CWD = os.getcwd()
+atexit.register(lambda: os.chdir(OLD_CWD))
+os.chdir(TEST_DIR.name)
+
+def close_open_files():
+    everything = gc.get_objects()
+    for obj in everything:
+        if isinstance(obj, io.IOBase):
+            obj.close()
+
+atexit.register(close_open_files)
+
 
 # Example 1
-class Field(object):
-    def __init__(self, name):
-        self.name = name
-        self.internal_name = '_' + self.name
-
-    def __get__(self, instance, instance_type):
-        if instance is None: return self
-        return getattr(instance, self.internal_name, '')
-
-    def __set__(self, instance, value):
-        setattr(instance, self.internal_name, value)
+try:
+    class MyError(Exception):
+        pass
+    
+    def my_generator():
+        yield 1
+        yield 2
+        yield 3
+    
+    it = my_generator()
+    print(next(it))  # Yield 1
+    print(next(it))  # Yield 2
+    print(it.throw(MyError('test error')))
+except:
+    logging.exception('Expected')
+else:
+    assert False
 
 
 # Example 2
-class Customer(object):
-    # Class attributes
-    first_name = Field('first_name')
-    last_name = Field('last_name')
-    prefix = Field('prefix')
-    suffix = Field('suffix')
+def my_generator():
+    yield 1
+
+    try:
+        yield 2
+    except MyError:
+        print('Got MyError!')
+    else:
+        yield 3
+
+    yield 4
+
+it = my_generator()
+print(next(it))  # Yield 1
+print(next(it))  # Yield 2
+print(it.throw(MyError('test error')))
 
 
 # Example 3
-foo = Customer()
-print('Before:', repr(foo.first_name), foo.__dict__)
-foo.first_name = 'Euclid'
-print('After: ', repr(foo.first_name), foo.__dict__)
+class Reset(Exception):
+    pass
+
+def timer(period):
+    current = period
+    while current:
+        current -= 1
+        try:
+            yield current
+        except Reset:
+            current = period
 
 
 # Example 4
-class Meta(type):
-    def __new__(meta, name, bases, class_dict):
-        for key, value in class_dict.items():
-            if isinstance(value, Field):
-                value.name = key
-                value.internal_name = '_' + key
-        cls = type.__new__(meta, name, bases, class_dict)
-        return cls
+RESETS = [
+    False, False, False, True, False, True, False,
+    False, False, False, False, False, False, False]
+
+def check_for_reset():
+    # Poll for external event
+    return RESETS.pop(0)
+
+def announce(remaining):
+    print(f'{remaining} ticks remaining')
+
+def run():
+    it = timer(4)    
+    while True:
+        try:
+            if check_for_reset():
+                current = it.throw(Reset())
+            else:
+                current = next(it)
+        except StopIteration:
+            break
+        else:
+            announce(current)
+
+run()
 
 
 # Example 5
-class DatabaseRow(object, metaclass=Meta):
-    pass
+class Timer:
+    def __init__(self, period):
+        self.current = period
+        self.period = period
+
+    def reset(self):
+        self.current = self.period
+
+    def __iter__(self):
+        while self.current:
+            self.current -= 1
+            yield self.current
 
 
 # Example 6
-class Field(object):
-    def __init__(self):
-        # These will be assigned by the metaclass.
-        self.name = None
-        self.internal_name = None
-    def __get__(self, instance, instance_type):
-        if instance is None: return self
-        return getattr(instance, self.internal_name, '')
+RESETS = [
+    False, False, True, False, True, False,
+    False, False, False, False, False, False, False]
 
-    def __set__(self, instance, value):
-        setattr(instance, self.internal_name, value)
+def run():
+    timer = Timer(4)
+    for current in timer:
+        if check_for_reset():
+            timer.reset()
+        announce(current)
 
-
-# Example 7
-class BetterCustomer(DatabaseRow):
-    first_name = Field()
-    last_name = Field()
-    prefix = Field()
-    suffix = Field()
-
-
-# Example 8
-foo = BetterCustomer()
-print('Before:', repr(foo.first_name), foo.__dict__)
-foo.first_name = 'Euler'
-print('After: ', repr(foo.first_name), foo.__dict__)
+run()

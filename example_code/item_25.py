@@ -1,6 +1,6 @@
-#!/usr/bin/env python3
+#!/usr/bin/env PYTHONHASHSEED=1234 python3
 
-# Copyright 2014 Brett Slatkin, Pearson Education Inc.
+# Copyright 2014-2019 Brett Slatkin, Pearson Education Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,120 +14,225 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Preamble to mimick book environment
+# Reproduce book environment
+import random
+random.seed(1234)
+
 import logging
 from pprint import pprint
 from sys import stdout as STDOUT
 
+# Write all output to a temporary directory
+import atexit
+import gc
+import io
+import os
+import tempfile
+
+TEST_DIR = tempfile.TemporaryDirectory()
+atexit.register(TEST_DIR.cleanup)
+
+# Make sure Windows processes exit cleanly
+OLD_CWD = os.getcwd()
+atexit.register(lambda: os.chdir(OLD_CWD))
+os.chdir(TEST_DIR.name)
+
+def close_open_files():
+    everything = gc.get_objects()
+    for obj in everything:
+        if isinstance(obj, io.IOBase):
+            obj.close()
+
+atexit.register(close_open_files)
+
 
 # Example 1
-class MyBaseClass(object):
-    def __init__(self, value):
-        self.value = value
-
-class MyChildClass(MyBaseClass):
-    def __init__(self):
-        MyBaseClass.__init__(self, 5)
-
-    def times_two(self):
-        return self.value * 2
-
-foo = MyChildClass()
-print(foo.times_two())
+def safe_division(number, divisor,
+                  ignore_overflow,
+                  ignore_zero_division):
+    try:
+        return number / divisor
+    except OverflowError:
+        if ignore_overflow:
+            return 0
+        else:
+            raise
+    except ZeroDivisionError:
+        if ignore_zero_division:
+            return float('inf')
+        else:
+            raise
 
 
 # Example 2
-class TimesTwo(object):
-    def __init__(self):
-        self.value *= 2
-
-class PlusFive(object):
-    def __init__(self):
-        self.value += 5
+result = safe_division(1.0, 10**500, True, False)
+print(result)
 
 
 # Example 3
-class OneWay(MyBaseClass, TimesTwo, PlusFive):
-    def __init__(self, value):
-        MyBaseClass.__init__(self, value)
-        TimesTwo.__init__(self)
-        PlusFive.__init__(self)
+result = safe_division(1.0, 0, False, True)
+print(result)
 
 
 # Example 4
-foo = OneWay(5)
-print('First ordering is (5 * 2) + 5 =', foo.value)
+def safe_division_b(number, divisor,
+                    ignore_overflow=False,        # Changed
+                    ignore_zero_division=False):  # Changed
+    try:
+        return number / divisor
+    except OverflowError:
+        if ignore_overflow:
+            return 0
+        else:
+            raise
+    except ZeroDivisionError:
+        if ignore_zero_division:
+            return float('inf')
+        else:
+            raise
 
 
 # Example 5
-class AnotherWay(MyBaseClass, PlusFive, TimesTwo):
-    def __init__(self, value):
-        MyBaseClass.__init__(self, value)
-        TimesTwo.__init__(self)
-        PlusFive.__init__(self)
+result = safe_division_b(1.0, 10**500, ignore_overflow=True)
+print(result)
+
+result = safe_division_b(1.0, 0, ignore_zero_division=True)
+print(result)
 
 
 # Example 6
-bar = AnotherWay(5)
-print('Second ordering still is', bar.value)
+assert safe_division_b(1.0, 10**500, True, False) == 0
 
 
 # Example 7
-class TimesFive(MyBaseClass):
-    def __init__(self, value):
-        MyBaseClass.__init__(self, value)
-        self.value *= 5
-
-class PlusTwo(MyBaseClass):
-    def __init__(self, value):
-        MyBaseClass.__init__(self, value)
-        self.value += 2
+def safe_division_c(number, divisor, *,  # Changed
+                    ignore_overflow=False,
+                    ignore_zero_division=False):
+    try:
+        return number / divisor
+    except OverflowError:
+        if ignore_overflow:
+            return 0
+        else:
+            raise
+    except ZeroDivisionError:
+        if ignore_zero_division:
+            return float('inf')
+        else:
+            raise
 
 
 # Example 8
-class ThisWay(TimesFive, PlusTwo):
-    def __init__(self, value):
-        TimesFive.__init__(self, value)
-        PlusTwo.__init__(self, value)
+try:
+    safe_division_c(1.0, 10**500, True, False)
+except:
+    logging.exception('Expected')
+else:
+    assert False
 
-foo = ThisWay(5)
-print('Should be (5 * 5) + 2 = 27 but is', foo.value)
+
+# Example 9
+result = safe_division_c(1.0, 0, ignore_zero_division=True)
+assert result == float('inf')
+
+try:
+    result = safe_division_c(1.0, 0)
+except ZeroDivisionError:
+    pass  # Expected
+else:
+    assert False
+
+
+# Example 10
+assert safe_division_c(number=2, divisor=5) == 0.4
+assert safe_division_c(divisor=5, number=2) == 0.4
+assert safe_division_c(2, divisor=5) == 0.4
 
 
 # Example 11
-# This is pretending to be Python 2 but it's not
-class MyBaseClass(object):
-    def __init__(self, value):
-        self.value = value
-
-class TimesFiveCorrect(MyBaseClass):
-    def __init__(self, value):
-        super(TimesFiveCorrect, self).__init__(value)
-        self.value *= 5
-
-class PlusTwoCorrect(MyBaseClass):
-    def __init__(self, value):
-        super(PlusTwoCorrect, self).__init__(value)
-        self.value += 2
-
-class GoodWay(TimesFiveCorrect, PlusTwoCorrect):
-    def __init__(self, value):
-        super(GoodWay, self).__init__(value)
-
-before_pprint = pprint
-pprint(GoodWay.mro())
-from pprint import pprint
-pprint(GoodWay.mro())
-pprint = pprint
+def safe_division_c(numerator, denominator, *,  # Changed
+                    ignore_overflow=False,
+                    ignore_zero_division=False):
+    try:
+        return numerator / denominator
+    except OverflowError:
+        if ignore_overflow:
+            return 0
+        else:
+            raise
+    except ZeroDivisionError:
+        if ignore_zero_division:
+            return float('inf')
+        else:
+            raise
 
 
 # Example 12
-class Explicit(MyBaseClass):
-    def __init__(self, value):
-        super(__class__, self).__init__(value * 2)
+try:
+    safe_division_c(number=2, divisor=5)
+except:
+    logging.exception('Expected')
+else:
+    assert False
 
-class Implicit(MyBaseClass):
-    def __init__(self, value):
-        super().__init__(value * 2)
 
-assert Explicit(10).value == Implicit(10).value
+# Example 13
+def safe_division_d(numerator, denominator, /, *,  # Changed
+                    ignore_overflow=False,
+                    ignore_zero_division=False):
+    try:
+        return numerator / denominator
+    except OverflowError:
+        if ignore_overflow:
+            return 0
+        else:
+            raise
+    except ZeroDivisionError:
+        if ignore_zero_division:
+            return float('inf')
+        else:
+            raise
+
+
+# Example 14
+assert safe_division_d(2, 5) == 0.4
+
+
+# Example 15
+try:
+    safe_division_d(numerator=2, denominator=5)
+except:
+    logging.exception('Expected')
+else:
+    assert False
+
+
+# Example 16
+def safe_division_e(numerator, denominator, /,
+                    ndigits=10, *,                # Changed
+                    ignore_overflow=False,
+                    ignore_zero_division=False):
+    try:
+        fraction = numerator / denominator        # Changed
+        return round(fraction, ndigits)           # Changed
+    except OverflowError:
+        if ignore_overflow:
+            return 0
+        else:
+            raise
+    except ZeroDivisionError:
+        if ignore_zero_division:
+            return float('inf')
+        else:
+            raise
+
+
+# Example 17
+result = safe_division_e(22, 7)
+print(result)
+
+result = safe_division_e(22, 7, 5)
+print(result)
+
+result = safe_division_e(22, 7, ndigits=2)
+print(result)

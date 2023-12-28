@@ -1,6 +1,6 @@
-#!/usr/bin/env python3
+#!/usr/bin/env PYTHONHASHSEED=1234 python3
 
-# Copyright 2014 Brett Slatkin, Pearson Education Inc.
+# Copyright 2014-2019 Brett Slatkin, Pearson Education Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,83 +14,153 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Preamble to mimick book environment
+# Reproduce book environment
+import random
+random.seed(1234)
+
 import logging
 from pprint import pprint
 from sys import stdout as STDOUT
 
+# Write all output to a temporary directory
+import atexit
+import gc
+import io
+import os
+import tempfile
+
+TEST_DIR = tempfile.TemporaryDirectory()
+atexit.register(TEST_DIR.cleanup)
+
+# Make sure Windows processes exit cleanly
+OLD_CWD = os.getcwd()
+atexit.register(lambda: os.chdir(OLD_CWD))
+os.chdir(TEST_DIR.name)
+
+def close_open_files():
+    everything = gc.get_objects()
+    for obj in everything:
+        if isinstance(obj, io.IOBase):
+            obj.close()
+
+atexit.register(close_open_files)
+
 
 # Example 1
-def divide(a, b):
-    try:
-        return a / b
-    except ZeroDivisionError:
-        return None
-
-assert divide(4, 2) == 2
-assert divide(0, 1) == 0
-assert divide(3, 6) == 0.5
-assert divide(1, 0) == None
+numbers = [93, 86, 11, 68, 70]
+numbers.sort()
+print(numbers)
 
 
 # Example 2
-x, y = 1, 0
-result = divide(x, y)
-if result is None:
-    print('Invalid inputs')
-else:
-    print('Result is %.1f' % result)
+class Tool:
+    def __init__(self, name, weight):
+        self.name = name
+        self.weight = weight
+
+    def __repr__(self):
+        return f'Tool({self.name!r}, {self.weight})'
+
+tools = [
+    Tool('level', 3.5),
+    Tool('hammer', 1.25),
+    Tool('screwdriver', 0.5),
+    Tool('chisel', 0.25),
+]
 
 
 # Example 3
-x, y = 0, 5
-result = divide(x, y)
-if not result:
-    print('Invalid inputs')  # This is wrong!
+try:
+    tools.sort()
+except:
+    logging.exception('Expected')
 else:
     assert False
 
 
 # Example 4
-def divide(a, b):
-    try:
-        return True, a / b
-    except ZeroDivisionError:
-        return False, None
+print('Unsorted:', repr(tools))
+tools.sort(key=lambda x: x.name)
+print('\nSorted:  ', tools)
 
 
 # Example 5
-x, y = 5, 0
-success, result = divide(x, y)
-if not success:
-    print('Invalid inputs')
+tools.sort(key=lambda x: x.weight)
+print('By weight:', tools)
 
 
 # Example 6
-x, y = 5, 0
-_, result = divide(x, y)
-if not result:
-    print('Invalid inputs')  # This is right
-
-x, y = 0, 5
-_, result = divide(x, y)
-if not result:
-    print('Invalid inputs')  # This is wrong
+places = ['home', 'work', 'New York', 'Paris']
+places.sort()
+print('Case sensitive:  ', places)
+places.sort(key=lambda x: x.lower())
+print('Case insensitive:', places)
 
 
 # Example 7
-def divide(a, b):
-    try:
-        return a / b
-    except ZeroDivisionError as e:
-        raise ValueError('Invalid inputs') from e
+power_tools = [
+    Tool('drill', 4),
+    Tool('circular saw', 5),
+    Tool('jackhammer', 40),
+    Tool('sander', 4),
+]
 
 
 # Example 8
-x, y = 5, 2
+saw = (5, 'circular saw')
+jackhammer = (40, 'jackhammer')
+assert not (jackhammer < saw)  # Matches expectations
+
+
+# Example 9
+drill = (4, 'drill')
+sander = (4, 'sander')
+assert drill[0] == sander[0]  # Same weight
+assert drill[1] < sander[1]   # Alphabetically less
+assert drill < sander         # Thus, drill comes first
+
+
+# Example 10
+power_tools.sort(key=lambda x: (x.weight, x.name))
+print(power_tools)
+
+
+# Example 11
+power_tools.sort(key=lambda x: (x.weight, x.name),
+                 reverse=True)  # Makes all criteria descending
+print(power_tools)
+
+
+# Example 12
+power_tools.sort(key=lambda x: (-x.weight, x.name))
+print(power_tools)
+
+
+# Example 13
 try:
-    result = divide(x, y)
-except ValueError:
-    print('Invalid inputs')
+    power_tools.sort(key=lambda x: (x.weight, -x.name),
+                     reverse=True)
+except:
+    logging.exception('Expected')
 else:
-    print('Result is %.1f' % result)
+    assert False
+
+
+# Example 14
+power_tools.sort(key=lambda x: x.name)   # Name ascending
+
+power_tools.sort(key=lambda x: x.weight, # Weight descending
+                 reverse=True)
+
+print(power_tools)
+
+
+# Example 15
+power_tools.sort(key=lambda x: x.name)
+print(power_tools)
+
+
+# Example 16
+power_tools.sort(key=lambda x: x.weight,
+                 reverse=True)
+print(power_tools)

@@ -1,6 +1,6 @@
-#!/usr/bin/env python3
+#!/usr/bin/env PYTHONHASHSEED=1234 python3
 
-# Copyright 2014 Brett Slatkin, Pearson Education Inc.
+# Copyright 2014-2019 Brett Slatkin, Pearson Education Inc.
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
 # you may not use this file except in compliance with the License.
@@ -14,180 +14,196 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Preamble to mimick book environment
+# Reproduce book environment
+import random
+random.seed(1234)
+
 import logging
 from pprint import pprint
 from sys import stdout as STDOUT
 
+# Write all output to a temporary directory
+import atexit
+import gc
+import io
+import os
+import tempfile
+
+TEST_DIR = tempfile.TemporaryDirectory()
+atexit.register(TEST_DIR.cleanup)
+
+# Make sure Windows processes exit cleanly
+OLD_CWD = os.getcwd()
+atexit.register(lambda: os.chdir(OLD_CWD))
+os.chdir(TEST_DIR.name)
+
+def close_open_files():
+    everything = gc.get_objects()
+    for obj in everything:
+        if isinstance(obj, io.IOBase):
+            obj.close()
+
+atexit.register(close_open_files)
+
 
 # Example 1
-class Homework(object):
-    def __init__(self):
-        self._grade = 0
-
-    @property
-    def grade(self):
-        return self._grade
-
-    @grade.setter
-    def grade(self, value):
-        if not (0 <= value <= 100):
-            raise ValueError('Grade must be between 0 and 100')
-        self._grade = value
+def normalize(numbers):
+    total = sum(numbers)
+    result = []
+    for value in numbers:
+        percent = 100 * value / total
+        result.append(percent)
+    return result
 
 
 # Example 2
-galileo = Homework()
-galileo.grade = 95
-print(galileo.grade)
+visits = [15, 35, 80]
+percentages = normalize(visits)
+print(percentages)
+assert sum(percentages) == 100.0
 
 
 # Example 3
-class Exam(object):
-    def __init__(self):
-        self._writing_grade = 0
-        self._math_grade = 0
+path = 'my_numbers.txt'
+with open(path, 'w') as f:
+    for i in (15, 35, 80):
+        f.write('%d\n' % i)
 
-    @staticmethod
-    def _check_grade(value):
-        if not (0 <= value <= 100):
-            raise ValueError('Grade must be between 0 and 100')
+def read_visits(data_path):
+    with open(data_path) as f:
+        for line in f:
+            yield int(line)
 
 
 # Example 4
-    @property
-    def writing_grade(self):
-        return self._writing_grade
-
-    @writing_grade.setter
-    def writing_grade(self, value):
-        self._check_grade(value)
-        self._writing_grade = value
-
-    @property
-    def math_grade(self):
-        return self._math_grade
-
-    @math_grade.setter
-    def math_grade(self, value):
-        self._check_grade(value)
-        self._math_grade = value
+it = read_visits('my_numbers.txt')
+percentages = normalize(it)
+print(percentages)
 
 
 # Example 5
-galileo = Exam()
-galileo.writing_grade = 85
-galileo.math_grade = 99
-print('Writing: %5r' % galileo.writing_grade)
-print('Math:    %5r' % galileo.math_grade)
+it = read_visits('my_numbers.txt')
+print(list(it))
+print(list(it))  # Already exhausted
 
 
 # Example 6
-class Grade(object):
-    def __get__(*args, **kwargs):
-        pass
-
-    def __set__(*args, **kwargs):
-        pass
-
-class Exam(object):
-    # Class attributes
-    math_grade = Grade()
-    writing_grade = Grade()
-    science_grade = Grade()
+def normalize_copy(numbers):
+    numbers_copy = list(numbers)  # Copy the iterator
+    total = sum(numbers_copy)
+    result = []
+    for value in numbers_copy:
+        percent = 100 * value / total
+        result.append(percent)
+    return result
 
 
 # Example 7
-exam = Exam()
-exam.writing_grade = 40
+it = read_visits('my_numbers.txt')
+percentages = normalize_copy(it)
+print(percentages)
+assert sum(percentages) == 100.0
 
 
 # Example 8
-Exam.__dict__['writing_grade'].__set__(exam, 40)
+def normalize_func(get_iter):
+    total = sum(get_iter())   # New iterator
+    result = []
+    for value in get_iter():  # New iterator
+        percent = 100 * value / total
+        result.append(percent)
+    return result
 
 
 # Example 9
-print(exam.writing_grade)
+path = 'my_numbers.txt'
+percentages = normalize_func(lambda: read_visits(path))
+print(percentages)
+assert sum(percentages) == 100.0
 
 
 # Example 10
-print(Exam.__dict__['writing_grade'].__get__(exam, Exam))
+class ReadVisits:
+    def __init__(self, data_path):
+        self.data_path = data_path
+
+    def __iter__(self):
+        with open(self.data_path) as f:
+            for line in f:
+                yield int(line)
 
 
 # Example 11
-class Grade(object):
-    def __init__(self):
-        self._value = 0
-
-    def __get__(self, instance, instance_type):
-        return self._value
-
-    def __set__(self, instance, value):
-        if not (0 <= value <= 100):
-            raise ValueError('Grade must be between 0 and 100')
-        self._value = value
-
-class Exam(object):
-    math_grade = Grade()
-    writing_grade = Grade()
-    science_grade = Grade()
+visits = ReadVisits(path)
+percentages = normalize(visits)
+print(percentages)
+assert sum(percentages) == 100.0
 
 
 # Example 12
-first_exam = Exam()
-first_exam.writing_grade = 82
-first_exam.science_grade = 99
-print('Writing', first_exam.writing_grade)
-print('Science', first_exam.science_grade)
+def normalize_defensive(numbers):
+    if iter(numbers) is numbers:  # An iterator -- bad!
+        raise TypeError('Must supply a container')
+    total = sum(numbers)
+    result = []
+    for value in numbers:
+        percent = 100 * value / total
+        result.append(percent)
+    return result
+
+visits = [15, 35, 80]
+normalize_defensive(visits)  # No error
+
+it = iter(visits)
+try:
+    normalize_defensive(it)
+except TypeError:
+    pass
+else:
+    assert False
 
 
 # Example 13
-second_exam = Exam()
-second_exam.writing_grade = 75
-print('Second', second_exam.writing_grade, 'is right')
-print('First ', first_exam.writing_grade, 'is wrong')
+from collections.abc import Iterator 
+
+def normalize_defensive(numbers):
+    if isinstance(numbers, Iterator):  # Another way to check
+        raise TypeError('Must supply a container')
+    total = sum(numbers)
+    result = []
+    for value in numbers:
+        percent = 100 * value / total
+        result.append(percent)
+    return result
+
+visits = [15, 35, 80]
+normalize_defensive(visits)  # No error
+
+it = iter(visits)
+try:
+    normalize_defensive(it)
+except TypeError:
+    pass
+else:
+    assert False
 
 
 # Example 14
-class Grade(object):
-    def __init__(self):
-        self._values = {}
+visits = [15, 35, 80]
+percentages = normalize_defensive(visits)
+assert sum(percentages) == 100.0
 
-    def __get__(self, instance, instance_type):
-        if instance is None: return self
-        return self._values.get(instance, 0)
-
-    def __set__(self, instance, value):
-        if not (0 <= value <= 100):
-            raise ValueError('Grade must be between 0 and 100')
-        self._values[instance] = value
+visits = ReadVisits(path)
+percentages = normalize_defensive(visits)
+assert sum(percentages) == 100.0
 
 
 # Example 15
-from weakref import WeakKeyDictionary
-
-class Grade(object):
-    def __init__(self):
-        self._values = WeakKeyDictionary()
-    def __get__(self, instance, instance_type):
-        if instance is None: return self
-        return self._values.get(instance, 0)
-
-    def __set__(self, instance, value):
-        if not (0 <= value <= 100):
-            raise ValueError('Grade must be between 0 and 100')
-        self._values[instance] = value
-
-
-# Example 16
-class Exam(object):
-    math_grade = Grade()
-    writing_grade = Grade()
-    science_grade = Grade()
-
-first_exam = Exam()
-first_exam.writing_grade = 82
-second_exam = Exam()
-second_exam.writing_grade = 75
-print('First ', first_exam.writing_grade, 'is right')
-print('Second', second_exam.writing_grade, 'is right')
+try:
+    visits = [15, 35, 80]
+    it = iter(visits)
+    normalize_defensive(it)
+except:
+    logging.exception('Expected')
+else:
+    assert False
